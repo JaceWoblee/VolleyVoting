@@ -4,7 +4,8 @@ const MessageSchema = new mongoose.Schema({
   shirtNumber: { type: Number, required: true },
   playerName: { type: String, required: true },
   text: { type: String, required: true },
-  isAnonymous: { type: Boolean, default: false }, // Add this field
+  isAnonymous: { type: Boolean, default: false },
+  isFromCoach: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 

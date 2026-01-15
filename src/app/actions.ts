@@ -12,26 +12,67 @@ export async function handleVote(formData: FormData, shirtNumber: number, pin: s
   await dbConnect();
 
   const user = await User.findOne({ shirtNumber, pin });
-  if (!user) return { error: "Invalid Login." };
-  if (user.hasVoted) return { error: "Already voted!" };
+  if (!user) return { error: "Ungültiger Login." };
+  if (user.hasVoted) return { error: "Bereits Abgestummen!" };
+
+  const shield = formData.get('shield') as string;
+  const spark = formData.get('spark') as string;
+  const catalyst = formData.get('catalyst') as string;
 
   try {
+    // 1. Create the detailed vote record
     await Vote.create({
-      shirtNumber: user.shirtNumber, // Match your Vote.ts model exactly
-      shield: formData.get('shield'),
-      spark: formData.get('spark'),
-      catalyst: formData.get('catalyst'),
+      shirtNumber: user.shirtNumber,
+      shield,
+      spark,
+      catalyst,
     });
 
+    // 2. Increment the total vote counter for the three chosen players
+    // This connects the vote to the "Pillars Progress" bar
+    if (shield) await User.updateOne({ name: shield }, { $inc: { votes: 1 } });
+    if (spark) await User.updateOne({ name: spark }, { $inc: { votes: 1 } });
+    if (catalyst) await User.updateOne({ name: catalyst }, { $inc: { votes: 1 } });
+
+    // 3. Mark the voter as finished
     user.hasVoted = true;
     await user.save();
-    revalidatePath('/admin'); // Update the coach's view
+    
+    revalidatePath('/admin');
+    redirect('/success');
   } catch (e: any) {
     console.error("Vote Error:", e);
     return { error: "DB Error: " + e.message }; 
   }
+}
 
-  redirect('/success');
+export async function syncUserVotes() {
+  await dbConnect();
+  try {
+    const users = await User.find({});
+    const allVotes = await Vote.find({});
+
+    for (const user of users) {
+      // Calculate how many standard votes this player received
+      const standardVotes = allVotes.filter(v => 
+        v.shield === user.name || 
+        v.spark === user.name || 
+        v.catalyst === user.name
+      ).length;
+
+      // Note: We don't overwrite Coach bonuses here. 
+      // This script should be used carefully if you have many Coach bonuses.
+      await User.updateOne(
+        { _id: user._id },
+        { $set: { votes: standardVotes } }
+      );
+    }
+
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (e) {
+    return { error: "Sync failed" };
+  }
 }
 
 export async function startNewMatch() {
@@ -78,7 +119,7 @@ export async function verifyLogin(shirtNumber: number, pin: string) {
   await dbConnect();
   const user = await User.findOne({ shirtNumber, pin });
   
-  if (!user) return { error: "Invalid credentials." };
+  if (!user) return { error: "Ungültige Eingabe." };
 
   if (user.shirtNumber === 0) {
     const cookieStore = await cookies();
@@ -117,7 +158,7 @@ export async function resetPlayerPin(shirtNumber: number) {
 
 export async function updatePin(shirtNumber: number, oldPin: string, newPin: string) {
   await dbConnect();
-  if (newPin.length < 4) return { error: "PIN must be at least 4 digits." };
+  if (newPin.length < 4) return { error: "PIN muss mindestens 4 Zeichen beinhalten." };
   
   const user = await User.findOneAndUpdate(
     { shirtNumber, pin: oldPin },
@@ -125,8 +166,43 @@ export async function updatePin(shirtNumber: number, oldPin: string, newPin: str
     { new: true }
   );
 
-  if (!user) return { error: "Could not update PIN." };
+  if (!user) return { error: "Konnte den PIN nicht updaten." };
   return { success: true };
+}
+
+export async function giveCoachBonus(targetShirtNumber: number, reason: string) {
+  await dbConnect();
+  try {
+    await User.updateOne(
+      { shirtNumber: targetShirtNumber },
+      { $inc: { votes: 1 } }
+    );
+
+    await Message.create({
+      shirtNumber: targetShirtNumber,
+      playerName: "Coach",
+      text: reason, // No need for "COACH BONUS" prefix anymore!
+      isAnonymous: false,
+      isFromCoach: true // Set the flag here
+    });
+
+    revalidatePath('/admin');
+    revalidatePath('/');
+    return { success: true };
+  } catch (e) {
+    return { error: "Failed to give bonus." };
+  }
+}
+
+export async function getPlayerMessages(shirtNumber: number) {
+  await dbConnect(); //
+  try {
+    // We only want messages sent TO this player
+    const messages = await Message.find({ shirtNumber }).sort({ createdAt: -1 }).lean();
+    return { messages: JSON.parse(JSON.stringify(messages)) };
+  } catch (e) {
+    return { error: "Failed to load messages" };
+  }
 }
 
 // src/app/actions.ts
@@ -147,7 +223,7 @@ export async function sendFeedback(
     revalidatePath('/admin');
     return { success: true };
   } catch (e) {
-    console.error("Feedback Error:", e);
-    return { error: "Failed to save message." };
+    console.error("Feedback Fehler:", e);
+    return { error: "Konnte die Nachricht nicht speichern." };
   }
 }

@@ -6,6 +6,7 @@ import ResetButton from './ResetButton';
 import { startNewMatch, seedTeam, resetPlayerPin } from '../actions';
 import { cookies } from 'next/headers';
 import Message from '@/models/Message';
+import BonusButton from '@/components/BonusButton';
 
 export default async function AdminPage() {
   const cookieStore = await cookies();
@@ -27,6 +28,8 @@ export default async function AdminPage() {
   const votes = await Vote.find({});
   const users = await User.find({ shirtNumber: { $ne: 0 } }).sort({ shirtNumber: 1 });
   const messages = await Message.find({}).sort({ createdAt: -1 });
+
+  const playerFeedbacks = messages.filter((m: any) => !m.isFromCoach);
 
   const totals = votes.reduce((acc: any, vote: any) => {
     if (vote.shield) acc[vote.shield] = (acc[vote.shield] || 0) + 1;
@@ -69,13 +72,22 @@ export default async function AdminPage() {
             <h2 className="text-xl font-bold mb-4">👤 Player PIN Management</h2>
             <div className="max-h-48 overflow-y-auto space-y-2">
               {users.map((user) => (
-                <div key={user.shirtNumber} className="flex items-center justify-between text-sm border-b pb-1">
-                  <span>#{user.shirtNumber} {user.name}</span>
-                  <form action={async () => { "use server"; await resetPlayerPin(user.shirtNumber); }}>
-                    <button className="text-[10px] bg-slate-100 hover:bg-red-100 px-2 py-1 rounded font-bold uppercase transition-colors">
-                      Reset PIN
-                    </button>
-                  </form>
+                <div key={user.shirtNumber} className="flex items-center justify-between text-sm border-b pb-2 pt-1">
+                  {/* 1. The Player Name (Only once!) */}
+                  <span className="font-medium">#{user.shirtNumber} {user.name}</span>
+
+                  {/* 2. The Button Group */}
+                  <div className="flex items-center gap-2">
+                    {/* Existing Reset PIN Form */}
+                    <form action={async () => { "use server"; await resetPlayerPin(user.shirtNumber); }}>
+                      <button className="text-[10px] bg-slate-100 hover:bg-red-100 px-2 py-1 rounded font-bold uppercase transition-colors">
+                        Reset PIN
+                      </button>
+                    </form>
+
+                    {/* New Bonus Button Component */}
+                    <BonusButton shirtNumber={user.shirtNumber} playerName={user.name} />
+                  </div>
                 </div>
               ))}
             </div>
