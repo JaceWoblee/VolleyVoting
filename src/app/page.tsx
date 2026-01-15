@@ -1,5 +1,5 @@
-export const dynamic = 'force-dynamic';
 'use client'
+export const dynamic = 'force-dynamic';
 
 import { TEAM_ROSTER } from '@/lib/players';
 import { sendFeedback, handleVote, verifyLogin, updatePin } from './actions';
