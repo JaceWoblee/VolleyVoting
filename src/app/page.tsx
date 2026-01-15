@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 'use client'
 
 import { TEAM_ROSTER } from '@/lib/players';

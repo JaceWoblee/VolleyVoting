@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import Vote from '@/models/Vote';
 import User from '@/models/User';
 import dbConnect from '@/lib/db';
