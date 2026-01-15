@@ -1,18 +1,31 @@
-import dbConnect from '@/lib/db';
 import Vote from '@/models/Vote';
 import User from '@/models/User';
+import dbConnect from '@/lib/db';
 import ResetButton from './ResetButton';
-import { startNewMatch, seedTeam,  resetPlayerPin } from '../actions';
+import { startNewMatch, seedTeam, resetPlayerPin } from '../actions';
+import { cookies } from 'next/headers';
+import Message from '@/models/Message';
 
-export default async function AdminPage({ searchParams }: { searchParams: { p?: string } }) {
-  if (searchParams.p !== process.env.ADMIN_PASSWORD) {
-    return <div className="p-8 text-center font-bold">Access Denied.</div>;
+export default async function AdminPage() {
+  const cookieStore = await cookies();
+  const session = cookieStore.get('admin_session');
+
+  if (!session || session.value !== 'authenticated') {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-slate-100 p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-xl max-w-sm text-center border border-slate-200">
+          <h1 className="text-xl font-bold text-slate-800">🔐 Restricted Access</h1>
+          <p className="text-slate-500 mt-2">Please log in as Coach to access this dashboard.</p>
+        </div>
+      </main>
+    );
   }
 
   await dbConnect();
-  
+
   const votes = await Vote.find({});
-  const users = await User.find({}).sort({ shirtNumber: 1 }); // Sort users by shirt number
+  const users = await User.find({ shirtNumber: { $ne: 0 } }).sort({ shirtNumber: 1 });
+  const messages = await Message.find({}).sort({ createdAt: -1 });
 
   const totals = votes.reduce((acc: any, vote: any) => {
     if (vote.shield) acc[vote.shield] = (acc[vote.shield] || 0) + 1;
@@ -22,7 +35,7 @@ export default async function AdminPage({ searchParams }: { searchParams: { p?: 
   }, {});
 
   const pendingVoters = users.filter(u => !u.hasVoted);
-  const MILESTONE = 15; 
+  const MILESTONE = 15;
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 text-black">
@@ -68,21 +81,7 @@ export default async function AdminPage({ searchParams }: { searchParams: { p?: 
           </div>
         </div>
 
-
-        {/* reset players*/}
-        <form action={async () => { 
-          "use server"; 
-          await seedTeam(); 
-        }}>
-          <button 
-            type="submit" 
-            className="bg-slate-800 text-white px-4 py-2 rounded text-xs hover:bg-black transition-colors"
-          >
-            ⚠️ RESET & RE-SEED ALL PLAYERS
-          </button>
-        </form>
-
-        {/* SECTION 2: SEASON PROGRESS TABLE */}
+        {/* SECTION 2: PILLARS PROGRESS */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <h2 className="text-xl font-bold p-6 bg-slate-50 border-b">🏆 Pillars Progress</h2>
           <table className="w-full text-left">
@@ -100,7 +99,6 @@ export default async function AdminPage({ searchParams }: { searchParams: { p?: 
                 .map(([name, count]: any) => {
                   const progress = count % MILESTONE;
                   const giftsEarned = Math.floor(count / MILESTONE);
-
                   return (
                     <tr key={name} className="border-b hover:bg-slate-50 transition-colors">
                       <td className="p-4 font-medium">{name}</td>
@@ -108,14 +106,9 @@ export default async function AdminPage({ searchParams }: { searchParams: { p?: 
                       <td className="p-4 text-center text-xl">{giftsEarned} 🎁</td>
                       <td className="p-4 min-w-[150px]">
                         <div className="w-full bg-slate-100 rounded-full h-2">
-                          <div 
-                            className="bg-indigo-600 h-2 rounded-full" 
-                            style={{ width: `${(progress / MILESTONE) * 100}%` }}
-                          ></div>
+                          <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${(progress / MILESTONE) * 100}%` }}></div>
                         </div>
-                        <p className="text-[9px] mt-1 text-slate-400 font-bold uppercase tracking-wider">
-                          {progress} / {MILESTONE} Points
-                        </p>
+                        <p className="text-[9px] mt-1 text-slate-400 font-bold uppercase tracking-wider">{progress} / {MILESTONE} Points</p>
                       </td>
                     </tr>
                   );
@@ -123,6 +116,42 @@ export default async function AdminPage({ searchParams }: { searchParams: { p?: 
             </tbody>
           </table>
         </div>
+
+        {/* SECTION 3: MESSAGES */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+          <h2 className="text-xl font-bold mb-4">📥 Player Messages</h2>
+          <div className="space-y-4">
+            {messages.length > 0 ? (
+              messages.map((msg: any) => (
+                <div key={msg._id.toString()} className="p-4 bg-slate-50 rounded-lg border border-slate-100">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-bold">
+                      {msg.isAnonymous === true ? (
+                        <span className="text-slate-400 italic">Anonym</span>
+                      ) : (
+                        <span className="text-indigo-600">#{msg.shirtNumber} {msg.playerName}</span>
+                      )}
+                    </span>
+                    <span className="text-[10px] text-slate-400">{new Date(msg.createdAt).toLocaleString()}</span>
+                  </div>
+                  <p className="text-sm text-slate-700">{msg.text}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-slate-400 text-sm italic">No messages yet.</p>
+            )}
+          </div>
+        </div>
+
+        {/* SECTION 4: SYSTEM TOOLS */}
+        <div className="pt-8 border-t border-slate-200">
+          <form action={async () => { "use server"; await seedTeam(); }}>
+            <button type="submit" className="bg-slate-800 text-white px-4 py-2 rounded text-xs hover:bg-black transition-colors">
+              ⚠️ RESET & RE-SEED ALL PLAYERS
+            </button>
+          </form>
+        </div>
+
       </div>
     </div>
   );

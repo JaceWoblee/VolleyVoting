@@ -5,6 +5,8 @@ import Vote from '@/models/Vote';
 import User from '@/models/User';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
+import Message from '@/models/Message';
 
 export async function handleVote(formData: FormData, shirtNumber: number, pin: string) {
   await dbConnect();
@@ -46,6 +48,7 @@ export async function seedTeam() {
   await dbConnect();
   
   const players = [
+    { shirtNumber: 0, name: "Coach", pin: "Yashakimi1", hasVoted: false, needsPasswordChange: false },
     { shirtNumber: 3, name: "Eda", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 7, name: "Elonie", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 9, name: "Yarina", pin: "1234", hasVoted: false, needsPasswordChange: true },
@@ -71,19 +74,36 @@ export async function seedTeam() {
   }
 }
 
-// FIX THIS: Ensure the return explicitly sends the boolean
 export async function verifyLogin(shirtNumber: number, pin: string) {
   await dbConnect();
   const user = await User.findOne({ shirtNumber, pin });
   
-  if (!user) return { error: "Invalid Shirt Number or PIN." };
-  
-  // Explicitly return the values the frontend is looking for
+  if (!user) return { error: "Invalid credentials." };
+
+  if (user.shirtNumber === 0) {
+    const cookieStore = await cookies();
+    cookieStore.set('admin_session', 'authenticated', { 
+    httpOnly: true, 
+    secure: process.env.NODE_ENV === 'production', 
+    maxAge: 60 * 60 * 2, 
+    path: '/' 
+  });
+    
+    return { success: true, isAdmin: true };
+  }
+
   return { 
     success: true, 
-    needsPasswordChange: user.needsPasswordChange === true, 
-    userName: user.name 
+    isAdmin: false,
+    userName: user.name,
+    needsPasswordChange: user.needsPasswordChange 
   };
+}
+
+export async function logout() {
+  const cookieStore = await cookies();
+  cookieStore.delete('admin_session');
+  redirect('/');
 }
 
 export async function resetPlayerPin(shirtNumber: number) {
@@ -107,4 +127,27 @@ export async function updatePin(shirtNumber: number, oldPin: string, newPin: str
 
   if (!user) return { error: "Could not update PIN." };
   return { success: true };
+}
+
+// src/app/actions.ts
+export async function sendFeedback(
+  shirtNumber: number, 
+  playerName: string, 
+  text: string, 
+  isAnonymous: boolean
+){
+  await dbConnect();
+  try {
+    await Message.create({ 
+      shirtNumber, 
+      playerName, 
+      text, 
+      isAnonymous
+    });
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (e) {
+    console.error("Feedback Error:", e);
+    return { error: "Failed to save message." };
+  }
 }
