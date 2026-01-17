@@ -5,7 +5,7 @@ const MessageSchema = new mongoose.Schema({
   playerName: { type: String, required: true },
   text: { type: String, required: true },
   isAnonymous: { type: Boolean, default: false },
-  isFromCoach: { type: Boolean, default: false },
+  forPlayer: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 

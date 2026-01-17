@@ -3,7 +3,7 @@ import Vote from '@/models/Vote';
 import User from '@/models/User';
 import dbConnect from '@/lib/db';
 import ResetButton from './ResetButton';
-import { startNewMatch, seedTeam, resetPlayerPin } from '../actions';
+import { syncUserVotes, seedTeam, resetPlayerPin } from '../actions';
 import { cookies } from 'next/headers';
 import Message from '@/models/Message';
 import BonusButton from '@/components/BonusButton';
@@ -28,13 +28,18 @@ export default async function AdminPage() {
   const votes = await Vote.find({});
   const users = await User.find({ shirtNumber: { $ne: 0 } }).sort({ shirtNumber: 1 });
   const messages = await Message.find({}).sort({ createdAt: -1 });
-
-  const playerFeedbacks = messages.filter((m: any) => !m.isFromCoach);
+  // Only show messages where forPlayer is false
+  const feedbackForAdmin = messages.filter((m: any) => m.forPlayer == false);
 
   const totals = votes.reduce((acc: any, vote: any) => {
-    if (vote.shield) acc[vote.shield] = (acc[vote.shield] || 0) + 1;
-    if (vote.spark) acc[vote.spark] = (acc[vote.spark] || 0) + 1;
-    if (vote.catalyst) acc[vote.catalyst] = (acc[vote.catalyst] || 0) + 1;
+    // Count the mental support vote
+    if (vote.mentalSupport) {
+      acc[vote.mentalSupport] = (acc[vote.mentalSupport] || 0) + 1;
+    }
+    // Count the bonus point vote
+    if (vote.bonusTarget) {
+      acc[vote.bonusTarget] = (acc[vote.bonusTarget] || 0) + 1;
+    }
     return acc;
   }, {});
 
@@ -131,33 +136,41 @@ export default async function AdminPage() {
         </div>
 
         {/* SECTION 3: MESSAGES */}
+        {/* SECTION 3: MESSAGES */}
+        {/* SECTION 3: MESSAGES */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h2 className="text-xl font-bold mb-4">📥 Player Messages</h2>
+          <h2 className="text-xl font-bold mb-4">📥 Player Feedback</h2>
           <div className="space-y-4">
-            {messages.length > 0 ? (
-              messages.map((msg: any) => (
+            {/* Use feedbackForAdmin, NOT messages */}
+            {feedbackForAdmin.length > 0 ? (
+              feedbackForAdmin.map((msg: any) => (
                 <div key={msg._id.toString()} className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="font-bold">
-                      {msg.isAnonymous === true ? (
-                        <span className="text-slate-400 italic">Anonym</span>
-                      ) : (
-                        <span className="text-indigo-600">#{msg.shirtNumber} {msg.playerName}</span>
-                      )}
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-bold text-indigo-600 uppercase">
+                      {msg.isAnonymous ? "Anonym" : msg.playerName}
                     </span>
-                    <span className="text-[10px] text-slate-400">{new Date(msg.createdAt).toLocaleString()}</span>
+                    <span className="text-[10px] text-slate-400">
+                      {new Date(msg.createdAt).toLocaleDateString()}
+                    </span>
                   </div>
                   <p className="text-sm text-slate-700">{msg.text}</p>
                 </div>
               ))
             ) : (
-              <p className="text-slate-400 text-sm italic">No messages yet.</p>
+              <p className="text-slate-400 text-sm italic">No feedback for coach yet.</p>
             )}
           </div>
         </div>
 
         {/* SECTION 4: SYSTEM TOOLS */}
-        <div className="pt-8 border-t border-slate-200">
+        <div className="pt-8 border-t border-slate-200 flex gap-4">
+          {/* The Sync Button to calculate points from the new Vote logic */}
+          <form action={async () => { "use server"; await syncUserVotes(); }}>
+            <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded text-xs hover:bg-indigo-700 transition-colors font-bold">
+              🔄 SYNC VOTE COUNTS
+            </button>
+          </form>
+
           <form action={async () => { "use server"; await seedTeam(); }}>
             <button type="submit" className="bg-slate-800 text-white px-4 py-2 rounded text-xs hover:bg-black transition-colors">
               ⚠️ RESET & RE-SEED ALL PLAYERS

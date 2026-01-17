@@ -11,68 +11,76 @@ import Message from '@/models/Message';
 export async function handleVote(formData: FormData, shirtNumber: number, pin: string) {
   await dbConnect();
 
-  const user = await User.findOne({ shirtNumber, pin });
-  if (!user) return { error: "Ungültiger Login." };
-  if (user.hasVoted) return { error: "Bereits Abgestummen!" };
+  const mentalSupport = formData.get('mentalSupport') as string;
+  const bonusTarget = formData.get('bonusTarget') as string;
+  const bonusReason = formData.get('bonusReason') as string;
 
-  const shield = formData.get('shield') as string;
-  const spark = formData.get('spark') as string;
-  const catalyst = formData.get('catalyst') as string;
+  // 1. Validation
+  if (!mentalSupport || !bonusTarget || !bonusReason.trim()) {
+    return { error: "Bitte fülle alle Voting-Felder aus!" };
+  }
+
+  const user = await User.findOne({ shirtNumber, pin });
+  if (!user || user.hasVoted) return { error: "Bereits abgestummen." };
 
   try {
-    // 1. Create the detailed vote record
-    await Vote.create({
-      shirtNumber: user.shirtNumber,
-      shield,
-      spark,
-      catalyst,
+    // 2. Find the target player to get their shirt number for the Message
+    const targetUser = await User.findOne({ name: bonusTarget });
+    if (!targetUser) return { error: "Zielspielerin nicht gefunden." };
+
+    // 3. Create the Vote record (For DB history)
+    await Vote.create({ 
+      shirtNumber, 
+      mentalSupport, 
+      bonusTarget, 
+      bonusReason 
     });
 
-    // 2. Increment the total vote counter for the three chosen players
-    // This connects the vote to the "Pillars Progress" bar
-    if (shield) await User.updateOne({ name: shield }, { $inc: { votes: 1 } });
-    if (spark) await User.updateOne({ name: spark }, { $inc: { votes: 1 } });
-    if (catalyst) await User.updateOne({ name: catalyst }, { $inc: { votes: 1 } });
+    // 4. Increment Points in the User model (For Scoreboard)
+    await User.updateOne({ name: mentalSupport }, { $inc: { votes: 1 } });
+    await User.updateOne({ name: bonusTarget }, { $inc: { votes: 1 } });
 
-    // 3. Mark the voter as finished
+    // 5. Create the mandatory message for the player (For Inbox)
+    await Message.create({
+      shirtNumber: targetUser.shirtNumber,
+      playerName: "ExtraPunkt", // Title shown in inbox
+      text: bonusReason,
+      isAnonymous: true,
+      forPlayer: true // Ensures it shows in Player Inbox, not Admin
+    });
+
     user.hasVoted = true;
     await user.save();
-    
     revalidatePath('/admin');
-    redirect('/success');
   } catch (e: any) {
-    console.error("Vote Error:", e);
-    return { error: "DB Error: " + e.message }; 
+    return { error: "Fehler: " + e.message };
   }
+  redirect('/success');
 }
 
 export async function syncUserVotes() {
   await dbConnect();
-  try {
-    const users = await User.find({});
-    const allVotes = await Vote.find({});
+  
+  const allVotes = await Vote.find({});
+  const allUsers = await User.find({});
 
-    for (const user of users) {
-      // Calculate how many standard votes this player received
-      const standardVotes = allVotes.filter(v => 
-        v.shield === user.name || 
-        v.spark === user.name || 
-        v.catalyst === user.name
-      ).length;
+  for (const user of allUsers) {
+    // We count every time the user's name appears in either category
+    const count = allVotes.filter(v => {
+      // Check mentalSupport and bonusTarget
+      return v.mentalSupport === user.name || v.bonusTarget === user.name;
+    }).length;
 
-      // Note: We don't overwrite Coach bonuses here. 
-      // This script should be used carefully if you have many Coach bonuses.
-      await User.updateOne(
-        { _id: user._id },
-        { $set: { votes: standardVotes } }
-      );
-    }
-
-    revalidatePath('/admin');
-    return { success: true };
-  } catch (e) {
-    return { error: "Sync failed" };
+    // Update the User document with the new total
+    await User.updateOne(
+      { _id: user._id }, 
+      { $set: { votes: count } }
+    );
   }
+
+  // Force Next.js to throw away the old dashboard data
+  revalidatePath('/admin');
+  return { success: true };
 }
 
 export async function startNewMatch() {
@@ -89,7 +97,7 @@ export async function seedTeam() {
   await dbConnect();
   
   const players = [
-    { shirtNumber: 0, name: "Coach", pin: "Yashakimi1", hasVoted: false, needsPasswordChange: false },
+    { shirtNumber: 0, name: "Yasha", pin: "Yashakimi1", hasVoted: false, needsPasswordChange: false },
     { shirtNumber: 3, name: "Eda", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 7, name: "Elonie", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 9, name: "Yarina", pin: "1234", hasVoted: false, needsPasswordChange: true },
@@ -173,24 +181,38 @@ export async function updatePin(shirtNumber: number, oldPin: string, newPin: str
 export async function giveCoachBonus(targetShirtNumber: number, reason: string) {
   await dbConnect();
   try {
+    // 1. Find the target player's name
+    const targetUser = await User.findOne({ shirtNumber: targetShirtNumber });
+    if (!targetUser) return { error: "Spielerin nicht gefunden." };
+
+    // 2. Create a "Fake" Vote entry so the Scoreboard and Sync see it
+    // We put the name in bonusTarget so it counts as 1 point
+    await Vote.create({
+      shirtNumber: 0, // 0 represents the Coach/Admin
+      mentalSupport: "Anzahl bonus Votes", // Placeholder for the first category
+      bonusTarget: targetUser.name, 
+      bonusReason: reason,
+    });
+
+    // 3. Update the User's point counter immediately
     await User.updateOne(
       { shirtNumber: targetShirtNumber },
       { $inc: { votes: 1 } }
     );
 
+    // 4. Create the message for the player's inbox
     await Message.create({
       shirtNumber: targetShirtNumber,
-      playerName: "Coach",
-      text: reason, // No need for "COACH BONUS" prefix anymore!
+      playerName: "Yasha",
+      text: reason,
       isAnonymous: false,
-      isFromCoach: true // Set the flag here
+      forPlayer: true
     });
 
     revalidatePath('/admin');
-    revalidatePath('/');
     return { success: true };
   } catch (e) {
-    return { error: "Failed to give bonus." };
+    return { error: "Bonus konnte nicht vergeben werden." };
   }
 }
 
@@ -218,7 +240,8 @@ export async function sendFeedback(
       shirtNumber, 
       playerName, 
       text, 
-      isAnonymous
+      isAnonymous,
+      forPlayer: false 
     });
     revalidatePath('/admin');
     return { success: true };
@@ -227,3 +250,4 @@ export async function sendFeedback(
     return { error: "Konnte die Nachricht nicht speichern." };
   }
 }
+
