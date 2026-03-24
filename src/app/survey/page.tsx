@@ -48,8 +48,12 @@ export default function SurveyPage() {
         <div className="bg-white rounded-2xl shadow-2xl p-6 md:p-8 border border-slate-200">
           <div className="mb-8 border-b border-slate-100 pb-6">
             <h1 className="text-3xl font-extrabold text-indigo-700 tracking-tight mb-2">Saison Feedback</h1>
-            <p className="text-sm text-slate-500 font-medium">
+            
+            <p className="text-sm text-slate-800 font-bold">
               Bitte sei ehrlich und kritisch – nur so können wir uns als Team weiterentwickeln!
+            </p>
+            <p className="text-sm text-slate-800 font-bold">
+              Das Feedback wird anonym gespeichert!
             </p>
           </div>
 
