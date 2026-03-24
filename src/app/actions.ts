@@ -254,7 +254,7 @@ export async function sendFeedback(
 export async function submitSurvey(q1: string, q2: string, q3: string, q4: string, q5: string, q6: string) {
   await dbConnect();
   try {
-    const combinedText = `1. Training (Allgemein): ${q1}\n\n2. Kommunikation: ${q2}\n\n3. Übungen (Spaß/Dauer): ${q3}\n\n4. Verbesserung/Änderung: ${q4}\n\n5. Drive/Motivation: ${q5}\n\n5. Webseite Feedback: ${q6}`;
+    const combinedText = `1. Training (Allgemein): ${q1}\n\n2. Kommunikation: ${q2}\n\n3. Übungen (Spaß/Dauer): ${q3}\n\n4. Verbesserung/Änderung: ${q4}\n\n5. Drive/Motivation: ${q5}\n\n6. Webseite Feedback: ${q6}`;
     
     await Message.create({ 
       shirtNumber: 999, 
