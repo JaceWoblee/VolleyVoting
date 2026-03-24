@@ -136,8 +136,6 @@ export default async function AdminPage() {
         </div>
 
         {/* SECTION 3: MESSAGES */}
-        {/* SECTION 3: MESSAGES */}
-        {/* SECTION 3: MESSAGES */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
           <h2 className="text-xl font-bold mb-4">📥 Player Feedback</h2>
           <div className="space-y-4">
@@ -153,7 +151,9 @@ export default async function AdminPage() {
                       {new Date(msg.createdAt).toLocaleDateString()}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-700">{msg.text}</p>
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                    {msg.text}
+                  </p>
                 </div>
               ))
             ) : (
