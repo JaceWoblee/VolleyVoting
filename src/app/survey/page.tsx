@@ -16,12 +16,16 @@ export default function SurveyPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!q1.trim() || !q2.trim() || !q3.trim() || !q4.trim() || !q5.trim() || !q6.trim() || !q7.trim()) {
-        return alert("Bitte beantworte alle Fragen, damit wir uns verbessern können!");
+    
+    // Validate 1-6 are filled (keeping 7 optional)
+    if (!q1.trim() || !q2.trim() || !q3.trim() || !q4.trim() || !q5.trim() || !q6.trim()) {
+        return alert("Bitte beantworte die Fragen 1 bis 6, damit wir uns verbessern können!");
     }
 
     setIsSubmitting(true);
-    const res = await submitSurvey(q1, q2, q3, q4, q5, q6, q7);
+    
+    // Send as an array
+    const res = await submitSurvey([q1, q2, q3, q4, q5, q6, q7]);
     
     if (res.error) {
       alert(res.error);
@@ -65,7 +69,7 @@ export default function SurveyPage() {
                 1. Was hilft dir im Training am meisten? Wovon sollten wir weniger tun?
               </label>
               <textarea 
-                value={q1} onChange={(e) => setQ1(e.target.value)} required
+                value={q1} onChange={(e) => setQ1(e.target.value)} 
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32 focus:ring-2 focus:ring-indigo-500 outline-none"
                 placeholder="Z.B Übungen oder Besprechungen/Erklärungen..."
               />
@@ -77,7 +81,7 @@ export default function SurveyPage() {
                 2. Ist die Kommunikation an den Matches klar? Wenn nicht, was verwirrt dich?
               </label>
               <textarea 
-                value={q2} onChange={(e) => setQ2(e.target.value)} required
+                value={q2} onChange={(e) => setQ2(e.target.value)} 
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32 focus:ring-2 focus:ring-indigo-500 outline-none"
                 placeholder="Z.B. Timeouts oder vor/nach dem Spiel (oder anderes feedback zum Coaching)..."
               />
@@ -90,7 +94,7 @@ export default function SurveyPage() {
                 Bei welchen hast du das Gefühl, dass wir sie zu selten, zu oft oder zu lange machen?
             </label>
             <textarea 
-                value={q3} onChange={(e) => setQ3(e.target.value)} required
+                value={q3} onChange={(e) => setQ3(e.target.value)} 
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32 focus:ring-2 focus:ring-indigo-500 outline-none"
                 placeholder="Sei ruhig spezifisch! (z.B. Aufwärmspiele, Defence, etc.)"
             />
@@ -102,7 +106,7 @@ export default function SurveyPage() {
                 4. Wenn du die neue Trainerin vom D5 werden würdest, was würdest du als erstes ändern? Was würdest du genau so machen?
               </label>
               <textarea 
-                value={q4} onChange={(e) => setQ4(e.target.value)} required
+                value={q4} onChange={(e) => setQ4(e.target.value)} 
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32 focus:ring-2 focus:ring-indigo-500 outline-none"
                 placeholder="Können auch mehrere dinge sein..."
               />
@@ -114,7 +118,7 @@ export default function SurveyPage() {
                 5. Was hat dich diese Saison angetrieben, dein Bestes zu geben, ins Training zu kommen oder dich zu verbessern?
               </label>
               <textarea 
-                value={q5} onChange={(e) => setQ5(e.target.value)} required
+                value={q5} onChange={(e) => setQ5(e.target.value)} 
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32 focus:ring-2 focus:ring-indigo-500 outline-none"
                 placeholder="Können auch mehrere dinge sein..."
               />
@@ -126,7 +130,7 @@ export default function SurveyPage() {
                 6. Würdest du die Webseite und das Voting-System nochmals in der nächsten Saison haben wollen? Warum Ja/Nein/Jein?
               </label>
               <textarea 
-                value={q6} onChange={(e) => setQ6(e.target.value)} required
+                value={q6} onChange={(e) => setQ6(e.target.value)} 
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32 focus:ring-2 focus:ring-indigo-500 outline-none"
                 placeholder="Auch generelles Feedback oder Anmerkungen zur Webseite sind willkommen :)"
               />

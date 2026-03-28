@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import Message from '@/models/Message';
 import Exercise from "@/models/Exercise"; 
+import SurveyResponse from "@/models/SurveyResponse";
 
 export async function handleVote(formData: FormData, shirtNumber: number, pin: string) {
   await dbConnect();
@@ -252,25 +253,6 @@ export async function sendFeedback(
   }
 }
 
-export async function submitSurvey(q1: string, q2: string, q3: string, q4: string, q5: string, q6: string, q7: string) {
-  await dbConnect();
-  try {
-    const combinedText = `1. Training (Allgemein): ${q1}\n\n2. Kommunikation: ${q2}\n\n3. Übungen (Spaß/Dauer): ${q3}\n\n4. Verbesserung/Änderung: ${q4}\n\n5. Drive/Motivation: ${q5}\n\n6. Webseite Feedback: ${q6}\n\n7. Optionales: ${q7}`;
-    
-    await Message.create({ 
-      shirtNumber: 999, 
-      playerName: "SeasonSurvey", 
-      text: combinedText, 
-      isAnonymous: true, 
-      forPlayer: false 
-    });
-    
-    return { success: true };
-  } catch (e) {
-    return { error: "Konnte die Umfrage nicht speichern." };
-  }
-}
-
 export async function createExercise(formData: any, player: any) {
   try {
     await dbConnect();
@@ -293,4 +275,24 @@ export async function deleteExercise(id: string, shirtNumber: number) {
   // Security check: only delete if the shirtNumber matches the creator
   await Exercise.findOneAndDelete({ _id: id, createdBy: shirtNumber });
   revalidatePath('/exercises');
+}
+
+export async function submitSurvey(answers: string[]) {
+  await dbConnect();
+  try {
+    // We create a database entry for every non-empty answer
+    const promises = answers.map((text, index) => {
+      if (!text.trim()) return null; // Skip if optional question 7 is empty
+      return SurveyResponse.create({
+        questionNumber: index + 1,
+        answer: text.trim()
+      });
+    });
+
+    await Promise.all(promises.filter(p => p !== null));
+    return { success: true };
+  } catch (e) {
+    console.error(e);
+    return { error: "Fehler beim Speichern der Umfrage." };
+  }
 }
