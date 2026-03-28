@@ -2,13 +2,13 @@ import dbConnect from "@/lib/db";
 import SurveyResponse from "@/models/SurveyResponse";
 
 const questionLabels = [
-  "1. Was hilft dir im Training am meisten? Wovon sollten wir weniger tun?",
-  "2. Ist die Kommunikation an den Matches klar? Wenn nicht, was verwirrt dich?",
-  "3. Welche Übungen magst du am liebsten? Welche gar nicht? \n Bei welchen hast du das Gefühl, dass wir sie zu selten, zu oft oder zu lange machen?",
-  "4. Wenn du die neue Trainerin vom D5 werden würdest, was würdest du als erstes ändern? Was würdest du genau so machen?",
-  "5. Was hat dich diese Saison angetrieben, dein Bestes zu geben, ins Training zu kommen oder dich zu verbessern?",
-  "6. Würdest du die Webseite und das Voting-System nochmals in der nächsten Saison haben wollen? Warum Ja/Nein/Jein?",
-  "7. Anderes Feedback"
+  "Was hilft dir im Training am meisten? Wovon sollten wir weniger tun?",
+  "Ist die Kommunikation an den Matches klar? Wenn nicht, was verwirrt dich?",
+  "Welche Übungen magst du am liebsten? Welche gar nicht? \n Bei welchen hast du das Gefühl, dass wir sie zu selten, zu oft oder zu lange machen?",
+  "Wenn du die neue Trainerin vom D5 werden würdest, was würdest du als erstes ändern? Was würdest du genau so machen?",
+  "Was hat dich diese Saison angetrieben, dein Bestes zu geben, ins Training zu kommen oder dich zu verbessern?",
+  "Würdest du die Webseite und das Voting-System nochmals in der nächsten Saison haben wollen? Warum Ja/Nein/Jein?",
+  "Anderes Feedback"
 ];
 
 export default async function SurveyResultsPage() {
