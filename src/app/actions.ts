@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import Message from '@/models/Message';
+import Exercise from "@/models/Exercise"; 
 
 export async function handleVote(formData: FormData, shirtNumber: number, pin: string) {
   await dbConnect();
@@ -251,10 +252,10 @@ export async function sendFeedback(
   }
 }
 
-export async function submitSurvey(q1: string, q2: string, q3: string, q4: string, q5: string, q6: string) {
+export async function submitSurvey(q1: string, q2: string, q3: string, q4: string, q5: string, q6: string, q7: string) {
   await dbConnect();
   try {
-    const combinedText = `1. Training (Allgemein): ${q1}\n\n2. Kommunikation: ${q2}\n\n3. Übungen (Spaß/Dauer): ${q3}\n\n4. Verbesserung/Änderung: ${q4}\n\n5. Drive/Motivation: ${q5}\n\n6. Webseite Feedback: ${q6}`;
+    const combinedText = `1. Training (Allgemein): ${q1}\n\n2. Kommunikation: ${q2}\n\n3. Übungen (Spaß/Dauer): ${q3}\n\n4. Verbesserung/Änderung: ${q4}\n\n5. Drive/Motivation: ${q5}\n\n6. Webseite Feedback: ${q6}\n\n7. Optionales: ${q7}`;
     
     await Message.create({ 
       shirtNumber: 999, 
@@ -268,4 +269,28 @@ export async function submitSurvey(q1: string, q2: string, q3: string, q4: strin
   } catch (e) {
     return { error: "Konnte die Umfrage nicht speichern." };
   }
+}
+
+export async function createExercise(formData: any, player: any) {
+  try {
+    await dbConnect();
+    await Exercise.create({
+      title: formData.title || "Unbenannte Übung", // Fallback if they leave title empty
+      description: formData.description || "",
+      videoLink: formData.videoLink || "",
+      createdBy: player.shirtNumber,
+      playerName: player.name
+    });
+    revalidatePath('/exercises');
+    return { success: true };
+  } catch (e) {
+    return { error: "Fehler beim Speichern." };
+  }
+}
+
+export async function deleteExercise(id: string, shirtNumber: number) {
+  await dbConnect();
+  // Security check: only delete if the shirtNumber matches the creator
+  await Exercise.findOneAndDelete({ _id: id, createdBy: shirtNumber });
+  revalidatePath('/exercises');
 }

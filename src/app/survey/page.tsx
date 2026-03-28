@@ -10,17 +10,18 @@ export default function SurveyPage() {
   const [q4, setQ4] = useState('');
   const [q5, setQ5] = useState('');
   const [q6, setQ6] = useState('');
+  const [q7, setQ7] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDone, setIsDone] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!q1.trim() || !q2.trim() || !q3.trim() || !q4.trim() || !q5.trim() || !q6.trim()) {
+    if (!q1.trim() || !q2.trim() || !q3.trim() || !q4.trim() || !q5.trim() || !q6.trim() || !q7.trim()) {
         return alert("Bitte beantworte alle Fragen, damit wir uns verbessern können!");
     }
 
     setIsSubmitting(true);
-    const res = await submitSurvey(q1, q2, q3, q4, q5, q6);
+    const res = await submitSurvey(q1, q2, q3, q4, q5, q6, q7);
     
     if (res.error) {
       alert(res.error);
@@ -128,6 +129,18 @@ export default function SurveyPage() {
                 value={q6} onChange={(e) => setQ6(e.target.value)} required
                 className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32 focus:ring-2 focus:ring-indigo-500 outline-none"
                 placeholder="Auch generelles Feedback oder Anmerkungen zur Webseite sind willkommen :)"
+              />
+            </div>
+
+            {/* Question 7 */}
+            <div>
+              <label className="block text-sm font-bold text-slate-800 mb-2">
+                7. Anderes Feedback
+              </label>
+              <textarea 
+                value={q7} onChange={(e) => setQ7(e.target.value)}
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-sm h-32 focus:ring-2 focus:ring-indigo-500 outline-none"
+                placeholder="Optional"
               />
             </div>
 
