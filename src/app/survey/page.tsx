@@ -16,11 +16,6 @@ export default function SurveyPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validate 1-6 are filled (keeping 7 optional)
-    if (!q1.trim() || !q2.trim() || !q3.trim() || !q4.trim() || !q5.trim() || !q6.trim()) {
-        return alert("Bitte beantworte die Fragen 1 bis 6, damit wir uns verbessern können!");
-    }
 
     setIsSubmitting(true);
     
