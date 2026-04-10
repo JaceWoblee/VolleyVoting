@@ -13,7 +13,7 @@ export default async function ExercisesPage() {
   let currentUser = null;
 
   if (adminCookie?.value === 'authenticated') {
-    currentUser = { name: "Coach", shirtNumber: 0, isAdmin: true };
+    currentUser = { name: "Yasha", shirtNumber: 0, isAdmin: true };
   } else if (playerCookie) {
     await dbConnect();
     // Assuming the cookie stores the shirtNumber

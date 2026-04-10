@@ -53,6 +53,13 @@ export default async function AdminPage() {
         {/* HEADER */}
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-indigo-600">Dashboard</h1>
+          {/* Quick Links */}
+              <a href="/exercises" className="bg-white border border-slate-200 hover:border-indigo-400 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
+                🏋️ Übungen
+              </a>
+              <a href="/admin/surveyanswers" className="bg-white border border-slate-200 hover:border-indigo-400 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
+                📊 Umfrage
+              </a>
           <ResetButton /> 
         </div>
 

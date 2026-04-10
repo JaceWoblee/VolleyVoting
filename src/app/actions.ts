@@ -55,7 +55,9 @@ export async function handleVote(formData: FormData) {
   } catch (e: any) {
     return { error: "Fehler: " + e.message };
   }
-  redirect('/success');
+  
+  // CHANGE THIS LINE:
+  redirect('/home'); 
 }
 
 export async function syncUserVotes() {
@@ -275,9 +277,36 @@ export async function createExercise(formData: any, player: any) {
 
 export async function deleteExercise(id: string, shirtNumber: number) {
   await dbConnect();
-  // Security check: only delete if the shirtNumber matches the creator
-  await Exercise.findOneAndDelete({ _id: id, createdBy: shirtNumber });
+  // Admin (shirtNumber 0) can delete anything. Players can only delete their own.
+  if (shirtNumber === 0) {
+    await Exercise.findByIdAndDelete(id);
+  } else {
+    await Exercise.findOneAndDelete({ _id: id, createdBy: shirtNumber });
+  }
   revalidatePath('/exercises');
+}
+
+export async function editExercise(id: string, formData: any, shirtNumber: number) {
+  await dbConnect();
+  try {
+    const exercise = await Exercise.findById(id);
+    if (!exercise) return { error: "Übung nicht gefunden." };
+
+    // Security: Only the creator or the Admin can edit
+    if (shirtNumber !== 0 && exercise.createdBy !== shirtNumber) {
+      return { error: "Keine Berechtigung." };
+    }
+
+    exercise.title = formData.title;
+    exercise.description = formData.description;
+    exercise.videoLink = formData.videoLink;
+    await exercise.save();
+
+    revalidatePath('/exercises');
+    return { success: true };
+  } catch (e) {
+    return { error: "Fehler beim Bearbeiten." };
+  }
 }
 
 export async function submitSurvey(answers: string[]) {
