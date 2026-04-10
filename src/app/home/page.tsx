@@ -44,7 +44,7 @@ export default async function PlayerHomePage() {
           {!user.hasVoted ? (
             <a href="/voting" className="block bg-indigo-600 text-white p-6 rounded-2xl shadow-md hover:bg-indigo-700 transition-all hover:-translate-y-1">
               <h2 className="text-xl font-bold mb-1">⭐ Match Voting</h2>
-              <p className="text-indigo-200 text-sm">Wähle den MVP für das letzte Spiel.</p>
+              <p className="text-indigo-200 text-sm">Deine Votes für das letzte Spiel.</p>
             </a>
           ) : (
             <div className="bg-slate-200 text-slate-400 p-6 rounded-2xl border border-slate-300 opacity-70">
@@ -56,13 +56,13 @@ export default async function PlayerHomePage() {
           {/* Exercises Card */}
           <a href="/exercises" className="block bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-400 transition-all hover:-translate-y-1">
             <h2 className="text-xl font-bold text-slate-800 mb-1">🏋️ Übungen</h2>
-            <p className="text-slate-500 text-sm">Vorschläge fürs nächste Training.</p>
+            <p className="text-slate-500 text-sm">Vorschläge für die Trainings.</p>
           </a>
 
           {/* Survey Card */}
           <a href="/survey" className="block bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-400 transition-all hover:-translate-y-1 md:col-span-2">
             <h2 className="text-xl font-bold text-slate-800 mb-1">📋 Saison Feedback</h2>
-            <p className="text-slate-500 text-sm">Fülle die anonyme Umfrage aus.</p>
+            <p className="text-slate-500 text-sm">Fülle die Umfrage aus.</p>
           </a>
         </div>
 
