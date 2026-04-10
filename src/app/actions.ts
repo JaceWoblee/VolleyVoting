@@ -10,45 +10,43 @@ import Message from '@/models/Message';
 import Exercise from "@/models/Exercise"; 
 import SurveyResponse from "@/models/SurveyResponse";
 
-export async function handleVote(formData: FormData, shirtNumber: number, pin: string) {
+export async function handleVote(formData: FormData) {
+  // 1. Read the cookie to find out who is voting
+  const cookieStore = await cookies();
+  const session = cookieStore.get('player_session');
+  
+  if (!session) return { error: "Nicht eingeloggt. Bitte neu laden." };
+  const shirtNumber = Number(session.value); // We get the ID securely from the cookie!
+
   await dbConnect();
 
   const mentalSupport = formData.get('mentalSupport') as string;
   const bonusTarget = formData.get('bonusTarget') as string;
   const bonusReason = formData.get('bonusReason') as string;
 
-  // 1. Validation
   if (!mentalSupport || !bonusTarget || !bonusReason.trim()) {
     return { error: "Bitte fülle alle Voting-Felder aus!" };
   }
 
-  const user = await User.findOne({ shirtNumber, pin });
-  if (!user || user.hasVoted) return { error: "Bereits abgestummen." };
+  // 2. We no longer check the PIN here, because the cookie proves they are logged in!
+  const user = await User.findOne({ shirtNumber });
+  if (!user || user.hasVoted) return { error: "Bereits abgestimmt." };
 
   try {
-    // 2. Find the target player to get their shirt number for the Message
     const targetUser = await User.findOne({ name: bonusTarget });
     if (!targetUser) return { error: "Zielspielerin nicht gefunden." };
 
-    // 3. Create the Vote record (For DB history)
-    await Vote.create({ 
-      shirtNumber, 
-      mentalSupport, 
-      bonusTarget, 
-      bonusReason 
-    });
+    await Vote.create({ shirtNumber, mentalSupport, bonusTarget, bonusReason });
 
-    // 4. Increment Points in the User model (For Scoreboard)
     await User.updateOne({ name: mentalSupport }, { $inc: { votes: 1 } });
     await User.updateOne({ name: bonusTarget }, { $inc: { votes: 1 } });
 
-    // 5. Create the mandatory message for the player (For Inbox)
     await Message.create({
       shirtNumber: targetUser.shirtNumber,
-      playerName: "ExtraPunkt", // Title shown in inbox
+      playerName: "ExtraPunkt", 
       text: bonusReason,
       isAnonymous: true,
-      forPlayer: true // Ensures it shows in Player Inbox, not Admin
+      forPlayer: true 
     });
 
     user.hasVoted = true;
@@ -100,6 +98,7 @@ export async function seedTeam() {
   
   const players = [
     { shirtNumber: 0, name: "Yasha", pin: "Yashakimi1", hasVoted: false, needsPasswordChange: false },
+    { shirtNumber: 1, name: "Test Dummy", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 3, name: "Eda", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 7, name: "Elonie", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 9, name: "Yarina", pin: "1234", hasVoted: false, needsPasswordChange: true },
@@ -131,17 +130,20 @@ export async function verifyLogin(shirtNumber: number, pin: string) {
   
   if (!user) return { error: "Ungültige Eingabe." };
 
+  const cookieStore = await cookies();
+
+  // Admin Login
   if (user.shirtNumber === 0) {
-    const cookieStore = await cookies();
     cookieStore.set('admin_session', 'authenticated', { 
-    httpOnly: true, 
-    secure: process.env.NODE_ENV === 'production', 
-    maxAge: 60 * 60 * 2, 
-    path: '/' 
-  });
-    
+      httpOnly: true, secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 2, path: '/' 
+    });
     return { success: true, isAdmin: true };
   }
+
+  // NEW: Player Login - We save their shirt number in the cookie
+  cookieStore.set('player_session', user.shirtNumber.toString(), { 
+    httpOnly: true, secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 7, path: '/' 
+  });
 
   return { 
     success: true, 
@@ -154,6 +156,7 @@ export async function verifyLogin(shirtNumber: number, pin: string) {
 export async function logout() {
   const cookieStore = await cookies();
   cookieStore.delete('admin_session');
+  cookieStore.delete('player_session'); // Ensure player is logged out too
   redirect('/');
 }
 
@@ -295,4 +298,11 @@ export async function submitSurvey(answers: string[]) {
     console.error(e);
     return { error: "Fehler beim Speichern der Umfrage." };
   }
+}
+
+export async function getExercises() {
+  await dbConnect();
+  // We convert it to a plain object so Next.js doesn't complain
+  const data = await Exercise.find({}).sort({ createdAt: -1 });
+  return JSON.parse(JSON.stringify(data));
 }
