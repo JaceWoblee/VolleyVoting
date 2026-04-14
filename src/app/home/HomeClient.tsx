@@ -26,6 +26,29 @@ export default function HomeClient({ messages, currentUser }: any) {
 
   return (
     <div className="space-y-8">
+      {/* TRAINING CHECK-IN */}
+      <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-200">
+        <h2 className="text-lg font-bold text-slate-800 mb-1">🎯 Trainings-Fokus</h2>
+        <p className="text-xs text-slate-500 mb-4">Was ist dein Hauptziel für das heutige Training?</p>
+        
+        <form action={async (formData) => {
+          const focus = formData.get('focusPoint') as string;
+          if (!focus.trim()) return;
+          // You might need to import submitTrainingFocus at the top of this file!
+          const { submitTrainingFocus } = await import('../actions');
+          await submitTrainingFocus(currentUser.shirtNumber, currentUser.name, focus);
+          alert("Fokus gesetzt! Viel Spaß im Training.");
+        }} className="flex gap-2">
+          <input 
+            type="text" name="focusPoint" required placeholder="z.B. Block-Timing, lauter rufen..."
+            className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-indigo-500 text-black"
+          />
+          <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-indigo-700 transition-colors">
+            Setzen
+          </button>
+        </form>
+      </div>
+
       {/* POSTFACH (Inbox) */}
       {messages.length > 0 && (
         <div className="bg-white rounded-2xl shadow-sm p-6 border border-slate-200">
@@ -51,7 +74,7 @@ export default function HomeClient({ messages, currentUser }: any) {
       {/* FEEDBACK TO TRAINER */}
       <div className="bg-slate-800 rounded-2xl shadow-xl p-6 text-white">
         <h2 className="text-lg font-bold mb-1">Nachricht an Coach Yasha 📬</h2>
-        <p className="text-xs text-slate-400 mb-4">Ideen, Abmeldungen oder Feedback.</p>
+        <p className="text-xs text-slate-400 mb-4">Feedback zu Übungen, Training oder anderem.</p>
         
         <form onSubmit={handleSendFeedback} className="space-y-4">
           <textarea 

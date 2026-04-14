@@ -9,6 +9,7 @@ import { cookies } from 'next/headers';
 import Message from '@/models/Message';
 import Exercise from "@/models/Exercise"; 
 import SurveyResponse from "@/models/SurveyResponse";
+import TrainingFocus from '@/models/TrainingFocus';
 
 export async function handleVote(formData: FormData) {
   // 1. Read the cookie to find out who is voting
@@ -334,4 +335,34 @@ export async function getExercises() {
   // We convert it to a plain object so Next.js doesn't complain
   const data = await Exercise.find({}).sort({ createdAt: -1 });
   return JSON.parse(JSON.stringify(data));
+}
+
+export async function submitTrainingFocus(shirtNumber: number, playerName: string, focusPoint: string) {
+  await dbConnect();
+  try {
+    // 1. Deactivate any existing active focus for this player so they don't have duplicates today
+    await TrainingFocus.updateMany({ shirtNumber, isActive: true }, { isActive: false });
+    
+    // 2. Create the new active focus point
+    await TrainingFocus.create({
+      shirtNumber,
+      playerName,
+      focusPoint,
+      isActive: true
+    });
+    
+    revalidatePath('/home');
+    revalidatePath('/admin/training');
+    return { success: true };
+  } catch (e) {
+    return { error: "Fehler beim Speichern des Fokus." };
+  }
+}
+
+export async function resetTrainingSession() {
+  await dbConnect();
+  // Instead of deleting, we just archive them!
+  await TrainingFocus.updateMany({ isActive: true }, { isActive: false });
+  revalidatePath('/admin/training');
+  return { success: true };
 }
