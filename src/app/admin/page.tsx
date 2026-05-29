@@ -36,7 +36,7 @@ export default async function AdminPage() {
     if (vote.mentalSupport) {
       acc[vote.mentalSupport] = (acc[vote.mentalSupport] || 0) + 1;
     }
-    // Count the bonus point vote
+    // Count the bonus point vote yeah
     if (vote.bonusTarget) {
       acc[vote.bonusTarget] = (acc[vote.bonusTarget] || 0) + 1;
     }
