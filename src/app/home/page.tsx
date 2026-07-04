@@ -60,10 +60,12 @@ export default async function PlayerHomePage() {
           </a>
 
           {/* Survey Card */}
+          {/* 
           <a href="/survey" className="block bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-400 transition-all hover:-translate-y-1 md:col-span-2">
             <h2 className="text-xl font-bold text-slate-800 mb-1">📋 Saison Feedback</h2>
             <p className="text-slate-500 text-sm">Fülle die Umfrage aus.</p>
           </a>
+          */}
         </div>
 
         {/* INTERACTIVE CLIENT COMPONENT (Inbox & Feedback) */}
