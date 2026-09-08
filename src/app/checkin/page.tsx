@@ -1,29 +1,28 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+
+// Move this OUTSIDE the component so it never changes
+const ALL_PLAYERS = [
+  { name: "Ainoa", image: "/ainoa.jpg", color: "#EC4899" },
+  { name: "Anaïs", image: "/anais.jpg", color: "#ec4848" },
+  { name: "Eda", image: "/eda.jpg", color: "#EC4899" },
+  { name: "Eli", image: "/eli.jpg", color: "#EC4899" },
+  { name: "Elonie", image: "/elonie.jpg", color: "#EC4899" },
+  { name: "Jeanne", image: "/jeanne.jpg", color: "#7cec48" },
+  { name: "Laura", image: "/laura.jpg", color: "#EC4899" },
+  { name: "Maria", image: "/maria.jpg", color: "#EC4899" },
+  { name: "Seraina", image: "/seraina.jpg", color: "#6648ec" },
+  { name: "Sofia", image: "/sofia.jpg", color: "#EC4899" },
+  { name: "Tina", image: "/tina.jpg", color: "#4c9449" },
+  { name: "Vera", image: "/vera.jpg", color: "#48ec9f" },
+  { name: "Yarina", image: "/yarina.jpg", color: "#EC4899" }
+];
 
 export default function CheckInKiosk() {
   const router = useRouter();
-  
-  const [players, setPlayers] = useState([
-    { name: "Laura", image: "/laura.jpg" , color: "#EC4899"},
-    { name: "Jeanne", image: "/jeanne.jpg" , color: "#7cec48"},
-    { name: "Vera", image: "/vera.jpg" , color: "#48ec9f"},
-    { name: "Seraina", image: "/seraina.jpg" , color: "#6648ec"},
-    { name: "Anaïs", image: "/anais.jpg" , color: "#ec4848"},
-    { name: "Tina", image: "/tina.jpg" , color: "#4c9449"},
-    { name: "Eli", image: "/eli.jpg" , color: "#EC4899"},
-    { name: "Sofia", image: "/sofia.jpg" , color: "#EC4899"},
-    { name: "Ainoa", image: "/ainoa.jpg" , color: "#EC4899"},
-    { name: "Eda", image: "/eda.jpg" , color: "#EC4899"},
-    { name: "Maria", image: "/maria.jpg" , color: "#EC4899"},
-    { name: "Elonie", image: "/elonie.jpg" , color: "#EC4899"},
-    { name: "Yarina", image: "/yarina.jpg" , color: "#EC4899"},
-
-    // ... add the rest of your players here
-  ]);
-  // TypeScript needs to know this can be a string OR null
+  const [players, setPlayers] = useState(ALL_PLAYERS);
   const [selectedPlayer, setSelectedPlayer] = useState<{name: string, image: string, color: string} | null>(null);
   const [mental, setMental] = useState<number>(5);
   const [physical, setPhysical] = useState<number>(5);
@@ -37,11 +36,36 @@ export default function CheckInKiosk() {
       body: JSON.stringify({ playerName: selectedPlayer.name, mentalHealth: mental, physicalHealth: physical })
     });
 
+    // Save the exact time of the vote to the iPad's local storage
+    localStorage.setItem(`checkin_${selectedPlayer.name}`, Date.now().toString());
+
     setPlayers(players.filter(p => p.name !== selectedPlayer.name));
     setSelectedPlayer(null);
     setMental(5);
     setPhysical(5);
   };
+
+  // Check memory when the page first loads
+  useEffect(() => {
+    const threeHoursInMilliseconds = 60 * 1000;
+    const now = Date.now();
+
+    const playersWhoNeedToVote = ALL_PLAYERS.filter(player => {
+      const checkInTime = localStorage.getItem(`checkin_${player.name}`);
+      
+      if (checkInTime) {
+        const timePassed = now - parseInt(checkInTime, 10);
+        if (timePassed < threeHoursInMilliseconds) {
+          return false; // Hide them, they voted less than 3 hours ago
+        } else {
+          localStorage.removeItem(`checkin_${player.name}`); // Clean up old memory
+        }
+      }
+      return true; // Show them, they haven't voted yet
+    });
+
+    setPlayers(playersWhoNeedToVote);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-900 p-8 font-sans">
@@ -51,7 +75,15 @@ export default function CheckInKiosk() {
           <span>D5 Check-In</span>
         </h1>
         <button 
-          onClick={() => router.push('/checkin/results')} 
+          onClick={() => {
+            // A simple prompt stops players from snooping
+            const pin = prompt("Enter Coach PIN:");
+            if (pin === "1337") { // Change this to your preferred PIN
+              router.push('/checkin/results');
+            } else if (pin !== null) {
+              alert("Incorrect PIN.");
+            }
+          }} 
           className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-8 text-xl rounded-xl transition-colors shadow-[0_0_15px_rgba(37,99,235,0.5)] active:scale-95"
         >
           Coach Results
