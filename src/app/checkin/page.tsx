@@ -17,7 +17,7 @@ const ALL_PLAYERS = [
   { name: "Sofia", image: "/sofia.jpg", color: "#EC4899" },
   { name: "Tina", image: "/tina.jpg", color: "#4c9449" },
   { name: "Vera", image: "/vera.jpg", color: "#48ec9f" },
-  { name: "Yarina", image: "/yarina.jpg", color: "#EC4899" }
+  { name: "Yarina", image: "/yarina.jpg", color: "#FF00E1" }
 ];
 
 export default function CheckInKiosk() {

@@ -15,7 +15,7 @@ export default function HomeClient({ messages, currentUser }: any) {
     
     const res = await sendFeedback(currentUser.shirtNumber, currentUser.name, feedback, isAnonymous);
     if (!res?.error) {
-      alert("Nachricht an Coach gesendet!");
+      alert("Nachricht an Yasha gesendet!");
       setFeedback('');
       setIsAnonymous(false); 
     } else {
@@ -50,7 +50,7 @@ export default function HomeClient({ messages, currentUser }: any) {
 
       {/* FEEDBACK TO TRAINER */}
       <div className="bg-slate-800 rounded-2xl shadow-xl p-6 text-white">
-        <h2 className="text-lg font-bold mb-1">Nachricht an Coach Yasha 📬</h2>
+        <h2 className="text-lg font-bold mb-1">Nachricht an Yasha 📬</h2>
         <p className="text-xs text-slate-400 mb-4">Feedback zu Übungen, Training oder anderem.</p>
         
         <form onSubmit={handleSendFeedback} className="space-y-4">
