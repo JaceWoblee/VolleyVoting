@@ -48,7 +48,7 @@ export default function CheckInKiosk() {
       <div className="flex justify-between items-center mb-12">
         <h1 className="text-4xl font-black text-white tracking-wider flex items-center gap-4">
           <span className="text-5xl drop-shadow-lg">🏐</span> 
-          <span>VB Therwil Check-In</span>
+          <span>D5 Check-In</span>
         </h1>
         <button 
           onClick={() => router.push('/checkin/results')} 
@@ -105,7 +105,7 @@ export default function CheckInKiosk() {
               {/* Mental Health Section */}
               <div className="bg-blue-50 p-6 rounded-2xl border border-blue-100">
                 <div className="flex justify-between items-center mb-4">
-                  <label className="text-xl font-bold text-gray-700">🧠 Mental Energy</label>
+                  <label className="text-xl font-bold text-gray-700">🧠 Mentale Energie</label>
                   <span className="text-2xl font-black text-blue-700 bg-blue-200 px-4 py-1 rounded-full shadow-sm">
                     {mental}
                   </span>
@@ -117,15 +117,15 @@ export default function CheckInKiosk() {
                   className="w-full h-3 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-blue-600" 
                 />
                 <div className="flex justify-between text-sm text-gray-500 mt-3 font-semibold">
-                  <span>Drained (1)</span>
-                  <span>Perfect (10)</span>
+                  <span>Leer (1)</span>
+                  <span>Perfekt (10)</span>
                 </div>
               </div>
 
               {/* Physical Health Section */}
               <div className="bg-emerald-50 p-6 rounded-2xl border border-emerald-100">
                 <div className="flex justify-between items-center mb-4">
-                  <label className="text-xl font-bold text-gray-700">🔋 Physical Body</label>
+                  <label className="text-xl font-bold text-gray-700">🔋 Physische Energie</label>
                   <span className="text-2xl font-black text-emerald-700 bg-emerald-200 px-4 py-1 rounded-full shadow-sm">
                     {physical}
                   </span>
@@ -137,8 +137,8 @@ export default function CheckInKiosk() {
                   className="w-full h-3 bg-gray-300 rounded-lg appearance-none cursor-pointer accent-emerald-600" 
                 />
                 <div className="flex justify-between text-sm text-gray-500 mt-3 font-semibold">
-                  <span>Hurting (1)</span>
-                  <span>Fresh (10)</span>
+                  <span>Schlimm (1)</span>
+                  <span>Perfekt (10)</span>
                 </div>
               </div>
             </div>

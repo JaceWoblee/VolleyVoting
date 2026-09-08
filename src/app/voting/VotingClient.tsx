@@ -33,7 +33,7 @@ export default function VotingClient({ userName }: { userName: string }) {
         <form action={onVote} className="bg-white rounded-2xl shadow-xl p-6 border border-slate-200 space-y-6">
           
           <div className="text-center text-slate-500 font-medium italic pb-4 border-b border-slate-100">
-            Hi, {userName}! Vielen Dank für deine Votes!
+            Hi, {userName}!
           </div>
 
           {/* VOTE 1: Mental Support */}
