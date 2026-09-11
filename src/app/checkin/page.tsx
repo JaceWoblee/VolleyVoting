@@ -5,19 +5,6 @@ import { useRouter } from 'next/navigation';
 
 // Move this OUTSIDE the component so it never changes
 const ALL_PLAYERS = [
-  { name: "Ainoa", image: "/ainoa.jpg", color: "#EC4899" },
-  { name: "Anaïs", image: "/anais.jpg", color: "#ec4848" },
-  { name: "Eda", image: "/eda.jpg", color: "#EC4899" },
-  { name: "Eli", image: "/eli.jpg", color: "#6648ec" },
-  { name: "Elonie", image: "/elonie.jpg", color: "#EC4899" },
-  { name: "Jeanne", image: "/jeanne.jpg", color: "#7cec48" },
-  { name: "Laura", image: "/laura.jpg", color: "#EC4899" },
-  { name: "Maria", image: "/maria.jpg", color: "#EC4899" },
-  { name: "Seraina", image: "/seraina.jpg", color: "#6648ec" },
-  { name: "Sofia", image: "/sofia.jpg", color: "#EC4899" },
-  { name: "Tina", image: "/tina.jpg", color: "#4c9449" },
-  { name: "Vera", image: "/vera.jpg", color: "#48ec9f" },
-  { name: "Yarina", image: "/yarina.jpg", color: "#FF00E1" }
 ];
 
 export default function CheckInKiosk() {
