@@ -8,7 +8,7 @@ const ALL_PLAYERS = [
   { name: "Ainoa", image: "/ainoa.jpg", color: "#EC4899" },
   { name: "Anaïs", image: "/anais.jpg", color: "#ec4848" },
   { name: "Eda", image: "/eda.jpg", color: "#EC4899" },
-  { name: "Eli", image: "/eli.jpg", color: "#EC4899" },
+  { name: "Eli", image: "/eli.jpg", color: "#6648ec" },
   { name: "Elonie", image: "/elonie.jpg", color: "#EC4899" },
   { name: "Jeanne", image: "/jeanne.jpg", color: "#7cec48" },
   { name: "Laura", image: "/laura.jpg", color: "#EC4899" },
