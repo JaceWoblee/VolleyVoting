@@ -1,12 +1,18 @@
 export const dynamic = 'force-dynamic';
-import Vote from '@/models/Vote';
-import User from '@/models/User';
-import dbConnect from '@/lib/db';
-import ResetButton from './ResetButton';
-import { syncUserVotes, seedTeam, resetPlayerPin } from '../actions';
+
 import { cookies } from 'next/headers';
+import dbConnect from '@/lib/db';
+import User from '@/models/User';
+import Vote from '@/models/Vote';
 import Message from '@/models/Message';
+import ResetButton from './ResetButton';
 import BonusButton from '@/components/BonusButton';
+import PollManager from './PollManager';
+import Poll from '@/models/Poll';
+import PollVote from '@/models/PollVote';
+import { syncUserVotes, resetPlayerPin } from '../actions';
+
+const SEASON_START = new Date('2026-09-01');
 
 export default async function AdminPage() {
   const cookieStore = await cookies();
@@ -25,18 +31,22 @@ export default async function AdminPage() {
 
   await dbConnect();
 
-  const votes = await Vote.find({});
+  const votes = await Vote.find({ createdAt: { $gte: SEASON_START } });
   const users = await User.find({ shirtNumber: { $ne: 0 } }).sort({ shirtNumber: 1 });
+  
   const messages = await Message.find({}).sort({ createdAt: -1 });
-  // Only show messages where forPlayer is false
   const feedbackForAdmin = messages.filter((m: any) => m.forPlayer == false);
 
+  const rawPolls = await Poll.find({}).sort({ createdAt: -1 });
+  const polls = JSON.parse(JSON.stringify(rawPolls));
+  
+  const rawPollVotes = await PollVote.find({});
+  const pollVotes = JSON.parse(JSON.stringify(rawPollVotes));
+
   const totals = votes.reduce((acc: any, vote: any) => {
-    // Count the mental support vote
     if (vote.mentalSupport) {
       acc[vote.mentalSupport] = (acc[vote.mentalSupport] || 0) + 1;
     }
-    // Count the bonus point vote yeah
     if (vote.bonusTarget) {
       acc[vote.bonusTarget] = (acc[vote.bonusTarget] || 0) + 1;
     }
@@ -53,14 +63,14 @@ export default async function AdminPage() {
         {/* HEADER */}
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-indigo-600">Dashboard</h1>
-          {/* Quick Links */}
-              <a href="/exercises" className="bg-white border border-slate-200 hover:border-indigo-400 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
-                🏋️ Übungen
-              </a>
-              <a href="/admin/surveyanswers" className="bg-white border border-slate-200 hover:border-indigo-400 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
-                📊 Umfrage
-              </a>
-          <ResetButton /> 
+          <div className="flex gap-4">
+            <a href="/exercises" className="bg-white border border-slate-200 hover:border-indigo-400 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
+              🏋️ Übungen
+            </a>
+            <a href="/admin/surveyanswers" className="bg-white border border-slate-200 hover:border-indigo-400 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
+              📊 Umfrage
+            </a>
+          </div>
         </div>
 
         {/* SECTION 1: PARTICIPATION & MANAGEMENT */}
@@ -85,19 +95,13 @@ export default async function AdminPage() {
             <div className="max-h-48 overflow-y-auto space-y-2">
               {users.map((user) => (
                 <div key={user.shirtNumber} className="flex items-center justify-between text-sm border-b pb-2 pt-1">
-                  {/* 1. The Player Name (Only once!) */}
                   <span className="font-medium">#{user.shirtNumber} {user.name}</span>
-
-                  {/* 2. The Button Group */}
                   <div className="flex items-center gap-2">
-                    {/* Existing Reset PIN Form */}
                     <form action={async () => { "use server"; await resetPlayerPin(user.shirtNumber); }}>
                       <button className="text-[10px] bg-slate-100 hover:bg-red-100 px-2 py-1 rounded font-bold uppercase transition-colors">
                         Reset PIN
                       </button>
                     </form>
-
-                    {/* New Bonus Button Component */}
                     <BonusButton shirtNumber={user.shirtNumber} playerName={user.name} />
                   </div>
                 </div>
@@ -146,7 +150,6 @@ export default async function AdminPage() {
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
           <h2 className="text-xl font-bold mb-4">📥 Player Feedback</h2>
           <div className="space-y-4">
-            {/* Use feedbackForAdmin, NOT messages */}
             {feedbackForAdmin.length > 0 ? (
               feedbackForAdmin.map((msg: any) => (
                 <div key={msg._id.toString()} className="p-4 bg-slate-50 rounded-lg border border-slate-100">
@@ -169,20 +172,18 @@ export default async function AdminPage() {
           </div>
         </div>
 
+        <PollManager polls={polls} pollVotes={pollVotes} />
+
         {/* SECTION 4: SYSTEM TOOLS */}
-        <div className="pt-8 border-t border-slate-200 flex gap-4">
-          {/* The Sync Button to calculate points from the new Vote logic */}
+        <div className="pt-8 border-t border-slate-200 flex gap-4 items-start">
           <form action={async () => { "use server"; await syncUserVotes(); }}>
-            <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded text-xs hover:bg-indigo-700 transition-colors font-bold">
+            <button type="submit" className="bg-indigo-600 text-white px-4 py-3 rounded-xl hover:bg-indigo-700 transition-colors font-bold shadow-md">
               🔄 SYNC VOTE COUNTS
             </button>
           </form>
 
-          <form action={async () => { "use server"; await seedTeam(); }}>
-            <button type="submit" className="bg-slate-800 text-white px-4 py-2 rounded text-xs hover:bg-black transition-colors">
-              ⚠️ RESET & RE-SEED ALL PLAYERS
-            </button>
-          </form>
+          {/* This places your two-button control panel cleanly on the page */}
+          <ResetButton />
         </div>
 
       </div>

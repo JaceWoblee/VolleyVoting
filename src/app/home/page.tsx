@@ -5,7 +5,9 @@ import { redirect } from 'next/navigation';
 import dbConnect from '@/lib/db';
 import User from '@/models/User';
 import Message from '@/models/Message';
-import HomeClient from './HomeClient'; // We will put the interactive bits here
+import HomeClient from './HomeClient';
+import Poll from '@/models/Poll';
+import PollVote from '@/models/PollVote';
 
 export default async function PlayerHomePage() {
   const cookieStore = await cookies();
@@ -19,9 +21,18 @@ export default async function PlayerHomePage() {
   
   if (!user) redirect('/');
 
-  // Fetch Inbox Messages for this player
+  // Fetch Inbox Messages
   const rawMessages = await Message.find({ shirtNumber, forPlayer: true }).sort({ createdAt: -1 });
   const messages = JSON.parse(JSON.stringify(rawMessages));
+
+  // NEW: Fetch Active Polls & Filter out the ones this player already answered
+  const activePolls = await Poll.find({ isActive: true });
+  const myPollVotes = await PollVote.find({ shirtNumber });
+  
+  const unansweredPolls = activePolls.filter(poll => 
+    !myPollVotes.some(vote => vote.pollId.toString() === poll._id.toString())
+  );
+  const pollsToDisplay = JSON.parse(JSON.stringify(unansweredPolls));
 
   return (
     <main className="min-h-screen bg-slate-50 py-10 px-4 text-slate-900">
@@ -31,7 +42,6 @@ export default async function PlayerHomePage() {
         <header className="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
           <div>
             <h1 className="text-2xl font-extrabold text-indigo-700">Hallo, {user.name}!</h1>
-            <p className="text-slate-500 text-sm">Willkommen im Team Dashboard</p>
           </div>
           <form action={async () => { "use server"; const { logout } = await import('@/app/actions'); await logout(); }}>
             <button className="text-sm font-bold text-slate-400 hover:text-red-500 transition-colors">Logout</button>
@@ -69,7 +79,11 @@ export default async function PlayerHomePage() {
         </div>
 
         {/* INTERACTIVE CLIENT COMPONENT (Inbox & Feedback) */}
-        <HomeClient messages={messages} currentUser={{ name: user.name, shirtNumber: user.shirtNumber }} />
+        <HomeClient 
+          messages={messages} 
+          currentUser={{ name: user.name, shirtNumber: user.shirtNumber }} 
+          polls={pollsToDisplay} 
+        />
 
       </div>
     </main>

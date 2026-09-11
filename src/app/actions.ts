@@ -1,15 +1,17 @@
 'use server'
 
-import dbConnect from '@/lib/db';
-import Vote from '@/models/Vote';
-import User from '@/models/User';
+
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
+import dbConnect from '@/lib/db';
+import Vote from '@/models/Vote';
+import User from '@/models/User';
 import Message from '@/models/Message';
 import Exercise from "@/models/Exercise"; 
 import SurveyResponse from "@/models/SurveyResponse";
-import TrainingFocus from '@/models/TrainingFocus';
+import Poll from '@/models/Poll';
+import PollVote from '@/models/PollVote';
 
 export async function handleVote(formData: FormData) {
   // 1. Read the cookie to find out who is voting
@@ -64,24 +66,23 @@ export async function handleVote(formData: FormData) {
 export async function syncUserVotes() {
   await dbConnect();
   
-  const allVotes = await Vote.find({});
+  const SEASON_START = new Date('2026-09-01');
+  
+  // Only sync votes from the current season
+  const allVotes = await Vote.find({ createdAt: { $gte: SEASON_START } });
   const allUsers = await User.find({});
 
   for (const user of allUsers) {
-    // We count every time the user's name appears in either category
     const count = allVotes.filter(v => {
-      // Check mentalSupport and bonusTarget
       return v.mentalSupport === user.name || v.bonusTarget === user.name;
     }).length;
 
-    // Update the User document with the new total
     await User.updateOne(
       { _id: user._id }, 
       { $set: { votes: count } }
     );
   }
 
-  // Force Next.js to throw away the old dashboard data
   revalidatePath('/admin');
   return { success: true };
 }
@@ -100,20 +101,21 @@ export async function seedTeam() {
   await dbConnect();
   
   const players = [
-    { shirtNumber: 0, name: "Yasha", pin: "Yashakimi1", hasVoted: false, needsPasswordChange: false },
+    { shirtNumber: 0, name: "Yasha", pin: "1337", hasVoted: false, needsPasswordChange: false },
     { shirtNumber: 1, name: "Test Dummy", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 3, name: "Eda", pin: "1234", hasVoted: false, needsPasswordChange: true },
+    { shirtNumber: 4, name: "Laura", pin: "1234", hasVoted: false, needsPasswordChange: true },
+    { shirtNumber: 5, name: "Eli", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 7, name: "Elonie", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 9, name: "Yarina", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 10, name: "Seraina", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 11, name: "Ainoa", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 14, name: "Jeanne", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 15, name: "Jaël", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 18, name: "Theresa", pin: "1234", hasVoted: false, needsPasswordChange: true },
+    { shirtNumber: 18, name: "Anaïs", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 21, name: "Vera", pin: "1234", hasVoted: false, needsPasswordChange: true },
     { shirtNumber: 22, name: "Sofia", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 23, name: "Emily", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 24, name: "Ela", pin: "1234", hasVoted: false, needsPasswordChange: true },
+    { shirtNumber: 32, name: "Maria", pin: "1234", hasVoted: false, needsPasswordChange: true },
+    { shirtNumber: 82, name: "Tina", pin: "1234", hasVoted: false, needsPasswordChange: true },
   ];
 
   try {
@@ -337,32 +339,42 @@ export async function getExercises() {
   return JSON.parse(JSON.stringify(data));
 }
 
-export async function submitTrainingFocus(shirtNumber: number, playerName: string, focusPoint: string) {
+export async function createPoll(question: string, type: 'text' | 'options', optionsStr: string, requireReason: boolean = false) {
   await dbConnect();
   try {
-    // 1. Deactivate any existing active focus for this player so they don't have duplicates today
-    await TrainingFocus.updateMany({ shirtNumber, isActive: true }, { isActive: false });
-    
-    // 2. Create the new active focus point
-    await TrainingFocus.create({
-      shirtNumber,
-      playerName,
-      focusPoint,
-      isActive: true
-    });
-    
-    revalidatePath('/home');
-    revalidatePath('/admin/training');
+    const options = type === 'options' 
+      ? optionsStr.split(',').map(opt => opt.trim()).filter(opt => opt.length > 0)
+      : [];
+    await Poll.create({ question, type, options, requireReason, isActive: true });
+    revalidatePath('/admin');
     return { success: true };
-  } catch (e) {
-    return { error: "Fehler beim Speichern des Fokus." };
+  } catch (error) {
+    return { error: "Failed to create poll." };
   }
 }
 
-export async function resetTrainingSession() {
+export async function togglePollStatus(pollId: string, currentStatus: boolean) {
   await dbConnect();
-  // Instead of deleting, we just archive them!
-  await TrainingFocus.updateMany({ isActive: true }, { isActive: false });
-  revalidatePath('/admin/training');
-  return { success: true };
+  try {
+    await Poll.findByIdAndUpdate(pollId, { isActive: !currentStatus });
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (error) {
+    return { error: "Failed to update poll status." };
+  }
+}
+
+export async function submitPollVote(pollId: string, shirtNumber: number, playerName: string, answer: string, reason: string = "") {
+  await dbConnect();
+  try {
+    const existingVote = await PollVote.findOne({ pollId, shirtNumber });
+    if (existingVote) return { error: "Du hast bereits abgestimmt." };
+
+    await PollVote.create({ pollId, shirtNumber, playerName, answer, reason });
+    revalidatePath('/home'); 
+    revalidatePath('/admin'); 
+    return { success: true };
+  } catch (error) {
+    return { error: "Fehler beim Abstimmen." };
+  }
 }

@@ -1,4 +1,4 @@
 export const TEAM_ROSTER = [
   "Eda", "Elonie", "Yarina", "Seraina", "Ainoa", "Jeanne",
-   "Jaël", "Theresa", "Vera", "Sofia", "Emily", "Ela"
+   "Eli", "Anaïs", "Vera", "Sofia", "Laura", "Tina", "Maria"
 ].sort();
