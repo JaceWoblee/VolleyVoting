@@ -5,19 +5,19 @@ import { useRouter } from 'next/navigation';
 
 // Move this OUTSIDE the component so it never changes
 const ALL_PLAYERS = [
-  { name: "Ainoa", image: "/ainoa.jpg", color: "#EC4899" },
-  { name: "Anaïs", image: "/anais.jpg", color: "#ec4848" },
-  { name: "Eda", image: "/eda.jpg", color: "#EC4899" },
-  { name: "Eli", image: "/eli.jpg", color: "#6648ec" },
-  { name: "Elonie", image: "/elonie.jpg", color: "#EC4899" },
-  { name: "Jeanne", image: "/jeanne.jpg", color: "#7cec48" },
-  { name: "Laura", image: "/laura.jpg", color: "#EC4899" },
-  { name: "Maria", image: "/maria.jpg", color: "#EC4899" },
-  { name: "Seraina", image: "/seraina.jpg", color: "#6648ec" },
-  { name: "Sofia", image: "/sofia.jpg", color: "#EC4899" },
-  { name: "Tina", image: "/tina.jpg", color: "#4c9449" },
-  { name: "Vera", image: "/vera.jpg", color: "#48ec9f" },
-  { name: "Yarina", image: "/yarina.jpg", color: "#FF00E1" }
+  { name: "Ainoa", image: "/ainoa.jpg", color: "#b9b9b9" },
+  { name: "Anaïs", image: "/anais.jpg", color: "#b9b9b9" },
+  { name: "Eda", image: "/eda.jpg", color: "#b9b9b9" },
+  { name: "Eli", image: "/eli.jpg", color: "#b9b9b9" },
+  { name: "Elonie", image: "/elonie.jpg", color: "#FF96D5" },
+  { name: "Jeanne", image: "/jeanne.jpg", color: "#A2B3DE" },
+  { name: "Laura", image: "/laura.jpg", color: "#F589D2" },
+  { name: "Maria", image: "/maria.jpg", color: "#40CACF" },
+  { name: "Seraina", image: "/seraina.jpg", color: "#73F8FF" },
+  { name: "Sofia", image: "/sofia.jpg", color: "#FF6E99" },
+  { name: "Tina", image: "/tina.jpg", color: "#FFE300" },
+  { name: "Vera", image: "/vera.jpg", color: "#00BBFF" },
+  { name: "Yarina", image: "/yarina.jpg", color: "#b9b9b9" }
 ];
 
 export default function CheckInKiosk() {
