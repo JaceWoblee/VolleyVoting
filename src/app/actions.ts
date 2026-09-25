@@ -378,3 +378,15 @@ export async function submitPollVote(pollId: string, shirtNumber: number, player
     return { error: "Fehler beim Abstimmen." };
   }
 }
+
+export async function exemptPlayer(shirtNumber: number) {
+  await dbConnect();
+  try {
+    // Setting hasVoted to true removes them from the pending list
+    await User.findOneAndUpdate({ shirtNumber }, { hasVoted: true });
+    revalidatePath('/admin');
+    return { success: true };
+  } catch (error) {
+    return { error: "Failed to excuse player." };
+  }
+}
