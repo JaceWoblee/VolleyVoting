@@ -27,22 +27,35 @@ export default function CheckInKiosk() {
   const [mental, setMental] = useState<number>(5);
   const [physical, setPhysical] = useState<number>(5);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   const handleVote = async () => {
-    if (!selectedPlayer) return;
+    if (isSubmitting) return; 
+    setIsSubmitting(true);
+    if (!selectedPlayer) {
+      setIsSubmitting(false);
+      return;
+    }
 
-    await fetch('/api/checkin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playerName: selectedPlayer.name, mentalHealth: mental, physicalHealth: physical })
-    });
+    try {
+      await fetch('/api/checkin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playerName: selectedPlayer.name, mentalHealth: mental, physicalHealth: physical })
+      });
 
-    // Save the exact time of the vote to the iPad's local storage
-    localStorage.setItem(`checkin_${selectedPlayer.name}`, Date.now().toString());
+      // Save the exact time of the vote to the iPad's local storage
+      localStorage.setItem(`checkin_${selectedPlayer.name}`, Date.now().toString());
 
-    setPlayers(players.filter(p => p.name !== selectedPlayer.name));
-    setSelectedPlayer(null);
-    setMental(5);
-    setPhysical(5);
+      setPlayers(players.filter(p => p.name !== selectedPlayer.name));
+      setSelectedPlayer(null);
+      setMental(5);
+      setPhysical(5);
+    } catch (error) {
+      console.error("Check-in failed:", error);
+    } finally {
+      setIsSubmitting(false); 
+    }
   };
 
   // Check memory when the page first loads
@@ -185,14 +198,15 @@ export default function CheckInKiosk() {
                 }} 
                 className="w-1/3 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold px-4 py-5 text-xl rounded-2xl shadow transition-transform active:scale-95"
               >
-                Cancel
+                Abbrechen
               </button>
               
               <button 
                 onClick={handleVote} 
-                className="w-2/3 bg-gradient-to-r from-gray-900 to-gray-700 hover:from-black hover:to-gray-800 text-white font-bold px-8 py-5 text-2xl rounded-2xl shadow-lg transition-transform active:scale-95"
+                disabled={isSubmitting}
+                className={`w-2/3 bg-gradient-to-r from-gray-900 to-gray-700 hover:from-black hover:to-gray-800 text-white font-bold px-8 py-5 text-2xl rounded-2xl shadow-lg transition-transform active:scale-95 ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                Submit Check-In
+                {isSubmitting ? 'Laden...' : 'Senden'}
               </button>
             </div>
           </div>
