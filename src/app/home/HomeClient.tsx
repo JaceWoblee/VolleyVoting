@@ -2,17 +2,57 @@
 
 import { useState } from 'react';
 import { sendFeedback, submitPollVote } from '../actions'; 
+import { LEGACY_ATTENDANCE, LEGACY_TOTAL_SESSIONS } from '@/lib/attendanceConfig';
 
-export default function HomeClient({ messages, currentUser, polls = [] }: any) {
+export default function HomeClient({ messages, currentUser, polls = [], allCheckIns = [] }: any) {
   const [feedback, setFeedback] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [pollAnswers, setPollAnswers] = useState<{[key: string]: string}>({});
-  const [pollReasons, setPollReasons] = useState<{[key: string]: string}>({}); // NEW STATE FOR REASONS
+  const [pollReasons, setPollReasons] = useState<{[key: string]: string}>({});
   const [submittingPoll, setSubmittingPoll] = useState<string | null>(null);
 
   const SEASON_START = new Date('2026-09-01');
+
+  const calculateTrueAttendance = (playerName: string, checkIns: any[]) => {
+    const legacyAttended = LEGACY_ATTENDANCE[playerName] || 0;
+    
+    const uniqueDates = new Set(
+      checkIns.map(record => new Date(record.createdAt).toDateString())
+    );
+    const dbTotalSessions = uniqueDates.size;
+    
+    const dbAttended = checkIns.filter(record => record.playerName === playerName).length;
+    
+    const totalAttended = legacyAttended + dbAttended;
+    const totalPossible = LEGACY_TOTAL_SESSIONS + dbTotalSessions;
+    
+    const percentage = totalPossible === 0 ? 0 : Math.round((totalAttended / totalPossible) * 100);
+    
+    return { totalAttended, totalPossible, percentage };
+  };
+
+  const playerStats = calculateTrueAttendance(currentUser.name, allCheckIns);
+
+  // 1. Get all unique training dates in chronological order
+  const uniqueDates = Array.from(new Set<string>(
+    allCheckIns.map((record: any) => new Date(record.createdAt).toDateString())
+  )).sort((a: string, b: string) => new Date(a).getTime() - new Date(b).getTime());
+
+  // 2. Take the last 12 sessions so the row doesn't get infinitely long
+  const recentTrainingDates = uniqueDates.slice(-12); 
+
+  // 3. Map over those dates to check if the player was present
+  const recentHistory = recentTrainingDates.map(date => {
+    const attended = allCheckIns.some(
+      (r: any) => r.playerName === currentUser.name && new Date(r.createdAt).toDateString() === date
+    );
+    // Format for the tooltip (e.g., "25. Sept")
+    const d = new Date(date);
+    const formattedDate = `${d.getDate()}. ${d.toLocaleString('de-CH', { month: 'short' })}`; 
+    return { date: formattedDate, attended };
+  });
 
   const handleSendFeedback = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,6 +153,51 @@ export default function HomeClient({ messages, currentUser, polls = [] }: any) {
           ))}
         </div>
       )}
+
+      {/* Players attendance */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mt-6">
+        
+        {/* Top Section: Stats & Ring */}
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Deine Trainingspräsenz</h3>
+            <p className="text-3xl font-black text-indigo-600">{playerStats.percentage}%</p>
+            <p className="text-xs text-slate-500 mt-1">{playerStats.totalAttended} von {playerStats.totalPossible} Trainings besucht</p>
+          </div>
+          
+          {/* Circular Progress Indicator */}
+          <div className="relative w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center">
+            <svg className="w-16 h-16 transform -rotate-90 absolute">
+              <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" className="text-slate-200" />
+              <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="6" fill="transparent" 
+                strokeDasharray="175" 
+                strokeDashoffset={175 - (175 * playerStats.percentage) / 100} 
+                className={playerStats.percentage >= 80 ? "text-emerald-500" : playerStats.percentage >= 60 ? "text-amber-500" : "text-red-500"} 
+              />
+            </svg>
+            <span className="text-xl">🏐</span>
+          </div>
+        </div>
+
+        {/* Bottom Section: Recent Trainings Squares */}
+        <div className="pt-4 border-t border-slate-100">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Letzte Check-ins</p>
+          <div className="flex gap-2 flex-wrap">
+            {recentHistory.length > 0 ? recentHistory.map((session, i) => (
+              <div 
+                key={i} 
+                title={session.date}
+                className={`w-7 h-7 rounded-md flex items-center justify-center shadow-sm ${session.attended ? 'bg-emerald-500' : 'bg-red-500/80'}`}
+              >
+                 {session.attended ? <span className="text-white text-xs font-black">✓</span> : <span className="text-white text-[10px] font-black">✕</span>}
+              </div>
+            )) : (
+              <span className="text-xs text-slate-400 italic">Noch keine digitalen Check-ins vorhanden.</span>
+            )}
+          </div>
+        </div>
+
+      </div>
       
       {/* POSTFACH (Inbox) */}
       {messages.length > 0 && (

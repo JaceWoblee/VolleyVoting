@@ -8,6 +8,8 @@ import Message from '@/models/Message';
 import HomeClient from './HomeClient';
 import Poll from '@/models/Poll';
 import PollVote from '@/models/PollVote';
+// NEW: Import the CheckIn model so we can read the database
+import CheckIn from '@/models/CheckIn'; 
 
 export default async function PlayerHomePage() {
   const cookieStore = await cookies();
@@ -25,7 +27,7 @@ export default async function PlayerHomePage() {
   const rawMessages = await Message.find({ shirtNumber, forPlayer: true }).sort({ createdAt: -1 });
   const messages = JSON.parse(JSON.stringify(rawMessages));
 
-  // NEW: Fetch Active Polls & Filter out the ones this player already answered
+  // Fetch Active Polls & Filter out the ones this player already answered
   const activePolls = await Poll.find({ isActive: true });
   const myPollVotes = await PollVote.find({ shirtNumber });
   
@@ -33,6 +35,10 @@ export default async function PlayerHomePage() {
     !myPollVotes.some(vote => vote.pollId.toString() === poll._id.toString())
   );
   const pollsToDisplay = JSON.parse(JSON.stringify(unansweredPolls));
+
+  // NEW: Fetch all check-ins to power the attendance math
+  const rawCheckIns = await CheckIn.find({});
+  const allCheckIns = JSON.parse(JSON.stringify(rawCheckIns));
 
   return (
     <main className="min-h-screen bg-slate-50 py-10 px-4 text-slate-900">
@@ -69,13 +75,6 @@ export default async function PlayerHomePage() {
             <p className="text-slate-500 text-sm">Vorschläge für die Trainings.</p>
           </a>
 
-          {/* Survey Card */}
-          {/* 
-          <a href="/survey" className="block bg-white p-6 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-400 transition-all hover:-translate-y-1 md:col-span-2">
-            <h2 className="text-xl font-bold text-slate-800 mb-1">📋 Saison Feedback</h2>
-            <p className="text-slate-500 text-sm">Fülle die Umfrage aus.</p>
-          </a>
-          */}
         </div>
 
         {/* INTERACTIVE CLIENT COMPONENT (Inbox & Feedback) */}
@@ -83,6 +82,7 @@ export default async function PlayerHomePage() {
           messages={messages} 
           currentUser={{ name: user.name, shirtNumber: user.shirtNumber }} 
           polls={pollsToDisplay} 
+          allCheckIns={allCheckIns} // NEW: Pass the data into the client component!
         />
 
       </div>

@@ -87,7 +87,6 @@ export default async function AdminPage() {
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-indigo-600">Dashboard</h1>
           <div className="flex gap-4">
-            {/* NEW: Home Button */}
             <a href="/" className="bg-slate-100 border border-slate-200 hover:border-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
               🏠 Home
             </a>
@@ -96,6 +95,9 @@ export default async function AdminPage() {
             </a>
             <a href="/admin/surveyanswers" className="bg-white border border-slate-200 hover:border-indigo-400 text-slate-700 px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
               📊 Umfrage
+            </a>
+            <a href="/admin/attendance" className="bg-indigo-600 border border-indigo-700 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all shadow-sm flex items-center gap-2">
+              📈 Attendance
             </a>
           </div>
         </div>
