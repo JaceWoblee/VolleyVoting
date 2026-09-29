@@ -28,11 +28,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ 
         success: false, 
         error: "Player already checked in recently." 
-      }, { status: 429 }); // 429 means "Too Many Requests"
+      }, { status: 429 });
     }
 
-    // 3. If no recent check-in, proceed with saving
-    const newCheckIn = await CheckIn.create(body);
+    // 3. NEW: Explicitly build the data object to include 'type'
+    const checkInData = {
+      playerName: body.playerName,
+      mentalHealth: body.mentalHealth,
+      physicalHealth: body.physicalHealth,
+      type: body.type || 'training' // Defaults to training if nothing is sent
+    };
+
+    // 4. Save to database
+    const newCheckIn = await CheckIn.create(checkInData);
     return NextResponse.json({ success: true, data: newCheckIn }, { status: 201 });
     
   } catch (error) {

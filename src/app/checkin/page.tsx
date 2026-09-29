@@ -26,6 +26,7 @@ export default function CheckInKiosk() {
   const [selectedPlayer, setSelectedPlayer] = useState<{name: string, image: string, color: string} | null>(null);
   const [mental, setMental] = useState<number>(5);
   const [physical, setPhysical] = useState<number>(5);
+  const [kioskMode, setKioskMode] = useState<'training' | 'match'>('training');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -41,10 +42,14 @@ export default function CheckInKiosk() {
       await fetch('/api/checkin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerName: selectedPlayer.name, mentalHealth: mental, physicalHealth: physical })
+        body: JSON.stringify({ 
+          playerName: selectedPlayer.name, 
+          mentalHealth: mental, 
+          physicalHealth: physical,
+          type: kioskMode
+        })
       });
 
-      // Save the exact time of the vote to the iPad's local storage
       localStorage.setItem(`checkin_${selectedPlayer.name}`, Date.now().toString());
 
       setPlayers(players.filter(p => p.name !== selectedPlayer.name));
@@ -83,24 +88,58 @@ export default function CheckInKiosk() {
   return (
     <div className="min-h-screen bg-slate-900 p-8 font-sans">
       <div className="flex justify-between items-center mb-12">
-        <h1 className="text-4xl font-black text-white tracking-wider flex items-center gap-4">
-          <span className="text-5xl drop-shadow-lg">🏐</span> 
-          <span>D5 Check-In</span>
-        </h1>
-        <button 
-          onClick={() => {
-            // A simple prompt stops players from snooping
-            const pin = prompt("Enter Coach PIN:");
-            if (pin === "1337") { // Change this to your preferred PIN
-              router.push('/checkin/results');
-            } else if (pin !== null) {
-              alert("Incorrect PIN.");
-            }
-          }} 
-          className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-8 text-xl rounded-xl transition-colors shadow-[0_0_15px_rgba(37,99,235,0.5)] active:scale-95"
-        >
-          Coach Results
-        </button>
+        
+        {/* Title & Protected Mode Toggle */}
+        <div className="flex items-center gap-6">
+          <h1 className="text-4xl font-black text-white tracking-wider flex items-center gap-4">
+            <span className="text-5xl drop-shadow-lg">🏐</span> 
+            <span>D5 Check-In</span>
+          </h1>
+
+          {/* PROTECTED MODE TOGGLE */}
+          <button 
+            onClick={() => {
+              const pin = prompt("Enter Coach PIN to change mode:");
+              if (pin === "1337") {
+                setKioskMode(kioskMode === 'training' ? 'match' : 'training');
+              } else if (pin !== null) {
+                alert("Incorrect PIN.");
+              }
+            }}
+            className={`px-4 py-2 rounded-xl font-extrabold text-xs uppercase tracking-widest transition-all cursor-pointer ${
+              kioskMode === 'match' 
+                ? 'bg-amber-500 text-amber-950 shadow-[0_0_20px_rgba(245,158,11,0.6)] scale-105' 
+                : 'bg-slate-800 text-slate-400 hover:text-white'
+            }`}
+          >
+            Mode: {kioskMode === 'match' ? '🔥 MATCH DAY' : '🏐 Training'}
+          </button>
+        </div>
+
+        {/* DYNAMIC RIGHT-SIDE BUTTON */}
+        {kioskMode === 'match' ? (
+          <button 
+            onClick={() => router.push('/admin/match')} 
+            className="bg-amber-500 hover:bg-amber-400 text-amber-950 font-black py-4 px-8 text-xl rounded-xl transition-colors shadow-[0_0_20px_rgba(245,158,11,0.5)] active:scale-95 flex items-center gap-3"
+          >
+            <span>🏐</span> Open Match Board
+          </button>
+        ) : (
+          <button 
+            onClick={() => {
+              const pin = prompt("Enter Coach PIN:");
+              if (pin === "1337") { 
+                router.push('/checkin/results');
+              } else if (pin !== null) {
+                alert("Incorrect PIN.");
+              }
+            }} 
+            className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 px-8 text-xl rounded-xl transition-colors shadow-[0_0_15px_rgba(37,99,235,0.5)] active:scale-95"
+          >
+            Coach Results
+          </button>
+        )}
+
       </div>
 
       <div className="grid grid-cols-3 gap-6">

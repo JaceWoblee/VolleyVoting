@@ -11,7 +11,8 @@ const CheckInSchema: Schema = new Schema({
   playerName: { type: String, required: true },
   mentalHealth: { type: Number, required: true },
   physicalHealth: { type: Number, required: true },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now },
+  type: { type: String, enum: ['training', 'match'], default: 'training'}
 });
 
 // This prevents Next.js from crashing by trying to create the model twice
