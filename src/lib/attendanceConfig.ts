@@ -16,22 +16,23 @@ export const LEGACY_ATTENDANCE: Record<string, number> = {
   "Yarina": 12
 };
 
-export const LEGACY_TOTAL_MATCH_SETS = 5; 
+export const LEGACY_TOTAL_MATCH_BALLS = 200; 
 
-export const LEGACY_MATCH_SETS: Record<string, number> = {
-  "Ainoa": 0, 
-  "Anaïs": 4, 
-  "Eda": 3, 
-  "Eli": 3, 
-  "Elonie": 0.5,
-  "Jeanne": 3.5, 
-  "Laura": 1.5, 
-  "Maria": 4, 
-  "Seraina": 2, 
-  "Sofia": 3, 
-  "Tina": 3, 
-  "Vera": 3, 
-  "Yarina": 4.5
+// NEW: The old decimals multiplied by 45 and rounded
+export const LEGACY_MATCH_BALLS: Record<string, number> = {
+  "Ainoa": 0,   
+  "Anaïs": 160, 
+  "Eda": 120,   
+  "Eli": 120, 
+  "Elonie": 27, 
+  "Jeanne": 138, 
+  "Laura": 62,  
+  "Maria": 160, 
+  "Seraina": 90, 
+  "Sofia": 120, 
+  "Tina": 120, 
+  "Vera": 110, 
+  "Yarina": 173 
 };
 
 export const PLAYER_ROLES: Record<string, string> = {

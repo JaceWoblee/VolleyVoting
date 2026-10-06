@@ -8,20 +8,16 @@ export const dynamic = 'force-dynamic';
 export default async function MatchPage() {
   await dbConnect();
 
-  // 1. Get today's start date
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // 2. Fetch all users
   const users = await User.find({ shirtNumber: { $nin: [0, 1] } });
 
-  // 3. Fetch check-ins made today that are marked as 'match'
   const matchCheckIns = await CheckIn.find({
     type: 'match',
     createdAt: { $gte: today }
   });
 
-  // 4. Map the checked-in players with their details
   const checkedInPlayers = matchCheckIns.map(record => {
     const userDoc = users.find(u => u.name === record.playerName);
     

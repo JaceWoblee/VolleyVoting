@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 const getRoleColors = (role: string) => {
   switch (role) {
@@ -44,39 +44,77 @@ interface SetData {
   libero: string | null;
   substitutions: Substitution[];
   finalScore: string;
+  liberoShares?: Record<string, number>;
 }
 
 export default function MatchBoardClient({ initialPlayers }: { initialPlayers: Player[] }) {
   const [court, setCourt] = useState<(string | null)[]>([null, null, null, null, null, null]);
   const [libero, setLibero] = useState<string | null>(null);
-  
-  // NEW: Track the "Bench Partner" for each position box. 
-  // If a sub happens, benchPartners[boxIndex] holds the player who is currently sitting on the bench waiting to re-enter.
-  const [benchPartners, setBenchPartners] = useState<Record<number, string>>({});
-
+  const [benchPartners, setBenchPartners] = useState<(string | null)[]>([null, null, null, null, null, null]);
   const [activeBox, setActiveBox] = useState<number | 'libero' | null>(null);
 
   const [currentSetNumber, setCurrentSetNumber] = useState<number>(1);
   const [matchSets, setMatchSets] = useState<SetData[]>([]);
   const [matchStarted, setMatchStarted] = useState<boolean>(false);
 
-  // Substitution Modal State
   const [subModal, setSubModal] = useState<{ playerOut: string; playerIn: string; boxIndex: number } | null>(null);
   const [subScoreInput, setSubScoreInput] = useState<string>('');
-
-  // Final Set Score Modal State
+  
   const [isEndingSet, setIsEndingSet] = useState<boolean>(false);
   const [finalScoreInput, setFinalScoreInput] = useState<string>('');
-
+  const [liberoShares, setLiberoShares] = useState<Record<string, number>>({});
+  
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [matchFinished, setMatchFinished] = useState<boolean>(false);
+
+  // 1. RECOVERY: Check for a live match when the iPad loads
+  useEffect(() => {
+    const fetchLiveMatch = async () => {
+      try {
+        const res = await fetch('/api/match');
+        const data = await res.json();
+        
+        if (data.liveMatch) {
+          setCourt(data.liveMatch.court || [null, null, null, null, null, null]);
+          setLibero(data.liveMatch.libero || null);
+          setCurrentSetNumber(data.liveMatch.currentSetNumber || 1);
+          setMatchSets(data.liveMatch.sets || []);
+          if (data.liveMatch.currentSetNumber > 1 || (data.liveMatch.court && data.liveMatch.court.some(Boolean))) {
+            setMatchStarted(true); 
+          }
+        }
+      } catch (e) {
+        console.error("Could not fetch live match data", e);
+      }
+    };
+    fetchLiveMatch();
+  }, []);
+
+  // 2. AUTOSAVE HELPER
+  const autoSaveDraft = async (updatedCourt: any, updatedLibero: any, updatedSets: any, updatedSetNum: number) => {
+    try {
+      await fetch('/api/match', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          court: updatedCourt,
+          libero: updatedLibero,
+          sets: updatedSets,
+          currentSetNumber: updatedSetNum
+        })
+      });
+    } catch (e) {
+      console.error("Failed to auto-save", e);
+    }
+  };
+
+  const availableLiberos = useMemo(() => initialPlayers.filter(p => p.role === 'Libera'), [initialPlayers]);
 
   const currentSetSubsCount = useMemo(() => {
     const currentSet = matchSets.find(s => s.setNumber === currentSetNumber);
     return currentSet ? currentSet.substitutions.length : 0;
   }, [matchSets, currentSetNumber]);
 
-  // List of players currently active anywhere on the court or libero box
   const activeOnCourtNames = useMemo(() => {
     const names = new Set(court.filter(Boolean));
     if (libero) names.add(libero);
@@ -92,7 +130,6 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
       return;
     }
 
-    // If match has started, clicking an active court box triggers a substitution with a bench player
     if (matchStarted && court[activeBox] !== null) {
       const playerOut = court[activeBox] as string;
 
@@ -102,12 +139,18 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
         return;
       }
 
+      const requiredBenchPlayer = benchPartners[activeBox];
+      if (requiredBenchPlayer && playerName !== requiredBenchPlayer) {
+        alert(`Regelverstoß: ${playerOut} kann nur durch ${requiredBenchPlayer} ersetzt werden!`);
+        setActiveBox(null);
+        return;
+      }
+
       setSubModal({ playerOut, playerIn: playerName, boxIndex: activeBox });
       setActiveBox(null);
       return;
     }
 
-    // Initial lineup placement before set starts
     const newCourt = [...court];
     const existingIndex = newCourt.indexOf(playerName);
     if (existingIndex !== -1) {
@@ -120,41 +163,45 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
 
   const confirmSubstitution = () => {
     if (!subModal) return;
-    const score = subScoreInput.trim() || '0:0';
+    const score = subScoreInput.trim().replace(/[\s\-]+/g, ':') || '0:0';
     const { playerOut, playerIn, boxIndex } = subModal;
 
-    // Save substitution into set data
-    setMatchSets(prev => {
-      const existingSetIndex = prev.findIndex(s => s.setNumber === currentSetNumber);
-      const subEntry = { playerOut, playerIn, score };
+    let updatedSets = [...matchSets];
+    const existingSetIndex = updatedSets.findIndex(s => s.setNumber === currentSetNumber);
+    const subEntry = { playerOut, playerIn, score };
+    
+    if (existingSetIndex >= 0) {
+      updatedSets[existingSetIndex] = {
+        ...updatedSets[existingSetIndex],
+        substitutions: [...updatedSets[existingSetIndex].substitutions, subEntry]
+      };
+    } else {
+      updatedSets.push({
+        setNumber: currentSetNumber,
+        startingLineup: [...court],
+        libero,
+        substitutions: [subEntry],
+        finalScore: ''
+      });
+    }
 
-      if (existingSetIndex >= 0) {
-        const updated = [...prev];
-        updated[existingSetIndex].substitutions.push(subEntry);
-        return updated;
-      } else {
-        return [...prev, {
-          setNumber: currentSetNumber,
-          startingLineup: [...court],
-          libero,
-          substitutions: [subEntry],
-          finalScore: ''
-        }];
-      }
-    });
-
-    // Update court to put the new player in, and save the old player into the bench partner slot for this box
     const newCourt = [...court];
     newCourt[boxIndex] = playerIn;
+    
+    const newBenchPartners = [...benchPartners];
+    if (newBenchPartners[boxIndex] === playerIn) {
+      newBenchPartners[boxIndex] = null; 
+    } else {
+      newBenchPartners[boxIndex] = playerOut;
+    }
+
+    setMatchSets(updatedSets);
     setCourt(newCourt);
-
-    setBenchPartners(prev => ({
-      ...prev,
-      [boxIndex]: playerOut
-    }));
-
+    setBenchPartners(newBenchPartners);
     setSubModal(null);
     setSubScoreInput('');
+
+    autoSaveDraft(newCourt, libero, updatedSets, currentSetNumber);
   };
 
   const startMatchOrSet = () => {
@@ -163,41 +210,75 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
       alert("Bitte besetze alle 6 Felder und wähle eine Libera aus!");
       return;
     }
-
     setMatchStarted(true);
-    setMatchSets(prev => {
-      if (prev.some(s => s.setNumber === currentSetNumber)) return prev;
-      return [...prev, {
+
+    let updatedSets = [...matchSets];
+    if (!updatedSets.some(s => s.setNumber === currentSetNumber)) {
+      updatedSets.push({
         setNumber: currentSetNumber,
         startingLineup: [...court],
         libero,
         substitutions: [],
         finalScore: ''
-      }];
+      });
+    }
+    setMatchSets(updatedSets);
+    autoSaveDraft(court, libero, updatedSets, currentSetNumber);
+  };
+
+  const openEndSetModal = () => {
+    setIsEndingSet(true);
+    const shares: Record<string, number> = {};
+    availableLiberos.forEach(l => {
+      shares[l.name] = (l.name === libero) ? 100 : 0;
     });
+    setLiberoShares(shares);
   };
 
   const confirmEndSet = () => {
-    const score = finalScoreInput.trim();
-    if (!score) {
-      alert("Bitte gib den Endstand des Satzes ein (z.B. 25:21)");
+    const score = finalScoreInput.trim().replace(/[\s\-]+/g, ':');
+    const match = score.match(/^(\d+):(\d+)$/);
+    
+    if (!match) {
+      alert("Bitte gib ein gültiges Ergebnis ein (z.B. 25 21 oder 25:21).");
       return;
     }
 
-    setMatchSets(prev => {
-      const updated = [...prev];
-      const idx = updated.findIndex(s => s.setNumber === currentSetNumber);
-      if (idx >= 0) {
-        updated[idx].finalScore = score;
-      }
-      return updated;
-    });
+    const s1 = parseInt(match[1], 10);
+    const s2 = parseInt(match[2], 10);
+    const target = currentSetNumber === 5 ? 15 : 25;
 
+    if (Math.max(s1, s2) < target || Math.abs(s1 - s2) < 2) {
+      alert(`Ungültiges Ergebnis! Ein Team muss mind. ${target} Punkte haben (bzw. 15 im 5. Satz) und der Abstand muss 2 betragen.`);
+      return;
+    }
+    
+    if (availableLiberos.length > 1) {
+      const totalPercent = Object.values(liberoShares).reduce((acc, val) => acc + (val || 0), 0);
+      if (totalPercent !== 100) {
+        alert("Die Spielanteile der Liberas müssen zusammen genau 100% ergeben!");
+        return;
+      }
+    }
+
+    let updatedSets = [...matchSets];
+    const idx = updatedSets.findIndex(s => s.setNumber === currentSetNumber);
+    if (idx >= 0) {
+      updatedSets[idx] = {
+        ...updatedSets[idx],
+        finalScore: score,
+        liberoShares: { ...liberoShares }
+      };
+    }
+
+    setMatchSets(updatedSets);
     setIsEndingSet(false);
     setFinalScoreInput('');
     setCurrentSetNumber(prev => prev + 1);
     setMatchStarted(false);
-    setBenchPartners({}); // Reset bench partners for the new set
+    setBenchPartners([null, null, null, null, null, null]);
+
+    autoSaveDraft(court, libero, updatedSets, currentSetNumber + 1);
   };
 
   const finishMatch = async () => {
@@ -211,12 +292,10 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
       const data = await res.json();
       if (data.success) {
         setMatchFinished(true);
-        alert("Match erfolgreich gespeichert!");
       } else {
         alert("Fehler beim Speichern.");
       }
     } catch (e) {
-      console.error(e);
       alert("Verbindungsfehler.");
     } finally {
       setIsSaving(false);
@@ -230,10 +309,22 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
       next[1] = prev[0]; next[2] = prev[1]; next[5] = prev[2];
       return next;
     });
+    setBenchPartners(prev => {
+      const next = [...prev];
+      next[4] = prev[5]; next[3] = prev[4]; next[0] = prev[3];
+      next[1] = prev[0]; next[2] = prev[1]; next[5] = prev[2];
+      return next;
+    });
   };
 
   const rotateBackward = () => {
     setCourt(prev => {
+      const next = [...prev];
+      next[5] = prev[4]; next[4] = prev[3]; next[3] = prev[0];
+      next[0] = prev[1]; next[1] = prev[2]; next[2] = prev[5];
+      return next;
+    });
+    setBenchPartners(prev => {
       const next = [...prev];
       next[5] = prev[4]; next[4] = prev[3]; next[3] = prev[0];
       next[0] = prev[1]; next[1] = prev[2]; next[2] = prev[5];
@@ -281,8 +372,6 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
 
   return (
     <div className="min-h-screen bg-slate-900 p-8 font-sans flex flex-col md:flex-row gap-8 relative">
-      
-      {/* LEFT SIDE: Court & Controls */}
       <div className="flex-1 flex flex-col items-center">
         <div className="flex justify-between items-center w-full max-w-2xl mb-6">
           <div>
@@ -299,7 +388,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
                 ▶ Start Satz {currentSetNumber}
               </button>
             ) : (
-              <button onClick={() => setIsEndingSet(true)} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition-all">
+              <button onClick={openEndSetModal} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition-all">
                 🏁 Satz Beenden
               </button>
             )}
@@ -343,26 +432,23 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
                 <button
                   key={box.idx}
                   onClick={() => setActiveBox(box.idx)}
-                  className={`relative flex flex-col items-center justify-center rounded-2xl border-2 transition-all w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 ${boxStyle}`}
+                  className={`relative flex flex-col items-center justify-center rounded-2xl border-2 transition-all w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 overflow-hidden ${boxStyle}`}
                 >
                   <span className="absolute top-1 left-2 text-[9px] font-bold uppercase tracking-widest opacity-50">{box.label}</span>
                   
                   {playerObj ? (
-                    <div className="flex flex-col items-center w-full h-full justify-center pt-2">
-                      {/* Active Player on Court */}
-                      <div className="flex flex-col items-center">
+                    <>
+                      <div className="flex flex-col items-center justify-center w-full mt-2">
                         <span className="text-2xl sm:text-3xl font-black leading-none opacity-90">#{playerObj.number}</span>
                         <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider opacity-90 truncate max-w-[100px]">{playerObj.name}</span>
                       </div>
-
-                      {/* Split Card: Bench Partner waiting underneath */}
                       {benchPlayerObj && (
-                        <div className="mt-1 w-full bg-slate-950/60 border-t border-white/10 py-0.5 px-2 flex items-center justify-center gap-1 rounded-b-xl">
+                        <div className="absolute bottom-0 left-0 w-full bg-slate-950/80 border-t border-white/10 py-1 px-2 flex items-center justify-center gap-1">
                           <span className="text-[9px] font-bold text-slate-400 uppercase">Bank:</span>
                           <span className="text-[10px] font-bold text-slate-300 truncate">#{benchPlayerObj.number} {benchPlayerObj.name}</span>
                         </div>
                       )}
-                    </div>
+                    </>
                   ) : (
                     <span className="font-bold text-3xl">+</span>
                   )}
@@ -385,7 +471,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
             
             <button
               onClick={() => setActiveBox('libero')}
-              className={`relative flex flex-col items-center justify-center rounded-2xl border-2 transition-all shadow-lg w-32 h-20 backdrop-blur-sm
+              className={`relative flex flex-col items-center justify-center rounded-2xl border-2 transition-all shadow-lg w-32 h-20 backdrop-blur-sm overflow-hidden
                 ${activeBox === 'libero' 
                   ? libero ? `${getRoleColors('Libera')} scale-110 ring-2 ring-white shadow-xl` : 'bg-yellow-500/20 border-yellow-400/50 scale-110 ring-2 ring-white text-yellow-200'
                   : libero ? `${getRoleColors('Libera')} hover:scale-105` 
@@ -407,7 +493,6 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
         </div>
       </div>
 
-      {/* RIGHT SIDE: Selection Drawer (Hides players already active on court) */}
       <div className={`w-full md:w-96 bg-slate-800/90 backdrop-blur-md rounded-3xl p-6 shadow-2xl border border-slate-700 transition-opacity duration-300 ${activeBox !== null ? 'opacity-100' : 'opacity-20 pointer-events-none'}`}>
         <h2 className="text-xl font-bold text-white mb-6 border-b border-slate-700 pb-4">
           {activeBox === 'libero' ? 'Wähle eine Libera' : matchStarted ? 'Wechsle Spielerin ein' : 'Wähle Startspielerin'}
@@ -418,8 +503,14 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
             if (activeBox === 'libero' && role !== 'Libera') return null;
             if (activeBox !== 'libero' && role === 'Libera') return null;
 
-            // Filter out players already active on court
-            const availablePlayers = players.filter((p: any) => !activeOnCourtNames.has(p.name));
+            const requiredBenchPlayer = (activeBox !== null && activeBox !== 'libero') ? benchPartners[activeBox] : null;
+
+            const availablePlayers = players.filter((p: any) => {
+              if (activeOnCourtNames.has(p.name)) return false; 
+              if (requiredBenchPlayer) return p.name === requiredBenchPlayer; 
+              if (benchPartners.includes(p.name)) return false; 
+              return true;
+            });
 
             if (availablePlayers.length === 0) return null;
 
@@ -427,7 +518,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
               <div key={role}>
                 <h3 className="text-[10px] font-black uppercase tracking-widest mb-3 flex items-center gap-2">
                   <span className={`w-2.5 h-2.5 rounded-full ${getRoleDot(role)} shadow-sm`}></span>
-                  <span className="text-slate-400">{role}</span>
+                  <span className="text-slate-400">{role === 'Mitte' ? 'Mitte (Haupt)' : role}</span>
                 </h3>
                 <div className="flex flex-col gap-2">
                   {availablePlayers.map((player: any) => (
@@ -453,7 +544,6 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
         </div>
       </div>
 
-      {/* MODAL 1: Substitution Score Prompt */}
       {subModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-slate-800 border border-slate-700 p-8 rounded-3xl w-96 shadow-2xl text-white">
@@ -461,7 +551,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
             <p className="text-sm text-slate-400 mb-6">
               <strong className="text-red-400">{subModal.playerOut}</strong> raus, <strong className="text-emerald-400">{subModal.playerIn}</strong> rein.
             </p>
-            <label className="block text-xs font-bold uppercase text-slate-400 mb-2">Spielstand zum Zeitpunkt (z.B. 14:12)</label>
+            <label className="block text-xs font-bold uppercase text-slate-400 mb-2">Punktestand (D5 : Gegner, z.B. 14:12)</label>
             <input 
               type="text" 
               placeholder="14:12" 
@@ -470,30 +560,50 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
               className="w-full bg-slate-900 border border-slate-600 p-3 rounded-xl text-white text-lg font-bold mb-6 outline-none focus:border-indigo-500"
             />
             <div className="flex gap-4">
-              <button onClick={() => setSubModal(null)} className="w-1/2 bg-slate-700 py-3 rounded-xl font-bold">Abbrechen</button>
+              <button onClick={() => setSubModal(null)} className="w-1/2 bg-slate-700 py-3 rounded-xl font-bold hover:bg-slate-600">Abbrechen</button>
               <button onClick={confirmSubstitution} className="w-1/2 bg-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-500">Bestätigen</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL 2: End Set Score Prompt */}
       {isEndingSet && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-slate-800 border border-slate-700 p-8 rounded-3xl w-96 shadow-2xl text-white">
             <h3 className="text-xl font-bold mb-2">Satz {currentSetNumber} beenden</h3>
-            <p className="text-sm text-slate-400 mb-6">Gib den finalen Punktestand ein (z.B. 25:21).</p>
-            <label className="block text-xs font-bold uppercase text-slate-400 mb-2">Endstand</label>
+            
+            <label className="block text-xs font-bold uppercase text-slate-400 mb-2 mt-4">Endstand (D5 : Gegner)</label>
             <input 
               type="text" 
               placeholder="25:21" 
               value={finalScoreInput} 
               onChange={e => setFinalScoreInput(e.target.value)}
-              className="w-full bg-slate-900 border border-slate-600 p-3 rounded-xl text-white text-lg font-bold mb-6 outline-none focus:border-indigo-500"
+              className="w-full bg-slate-900 border border-slate-600 p-3 rounded-xl text-white text-lg font-bold outline-none focus:border-indigo-500"
             />
-            <div className="flex gap-4">
-              <button onClick={() => setIsEndingSet(false)} className="w-1/2 bg-slate-700 py-3 rounded-xl font-bold">Abbrechen</button>
-              <button onClick={confirmEndSet} className="w-1/2 bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-500">Satz speichern</button>
+
+            {availableLiberos.length > 1 && (
+              <div className="mt-6 p-4 bg-slate-900/50 rounded-xl border border-slate-700">
+                <label className="block text-xs font-bold uppercase text-slate-400 mb-3">Libera Einsatz (%)</label>
+                {availableLiberos.map(lib => (
+                  <div key={lib.name} className="flex flex-col mb-4 last:mb-0">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm font-bold text-slate-300">{lib.name}</span>
+                      <span className="text-lg font-black text-amber-400">{liberoShares[lib.name] ?? 0}%</span>
+                    </div>
+                    <input 
+                      type="range" min="0" max="100" step="10"
+                      value={liberoShares[lib.name] ?? 0} 
+                      onChange={e => setLiberoShares({...liberoShares, [lib.name]: parseInt(e.target.value) || 0})} 
+                      className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-500" 
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex gap-4 mt-8">
+              <button onClick={() => setIsEndingSet(false)} className="w-1/2 bg-slate-700 py-3 rounded-xl font-bold hover:bg-slate-600">Abbrechen</button>
+              <button onClick={confirmEndSet} className="w-1/2 bg-emerald-600 py-3 rounded-xl font-bold hover:bg-emerald-500">Speichern</button>
             </div>
           </div>
         </div>

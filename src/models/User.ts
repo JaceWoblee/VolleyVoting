@@ -5,7 +5,10 @@ const UserSchema = new mongoose.Schema({
   pin: { type: String, required: true },
   name: { type: String, required: true },
   hasVoted: { type: Boolean, default: false },
-  needsPasswordChange: { type: Boolean, default: true }
+  needsPasswordChange: { type: Boolean, default: true },
+
+  matchBallsPlayed: { type: Number, default: 0 },
+  teamMatchBalls: { type: Number, default: 0 }
 });
 
 export default mongoose.models.User || mongoose.model('User', UserSchema);

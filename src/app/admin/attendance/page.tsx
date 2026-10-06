@@ -5,8 +5,8 @@ import CheckIn from '@/models/CheckIn';
 import { 
   LEGACY_ATTENDANCE, 
   LEGACY_TOTAL_SESSIONS,
-  LEGACY_MATCH_SETS,
-  LEGACY_TOTAL_MATCH_SETS,
+  LEGACY_MATCH_BALLS,         
+  LEGACY_TOTAL_MATCH_BALLS,    
   PLAYER_ROLES
 } from '@/lib/attendanceConfig';
 
@@ -26,15 +26,18 @@ export default async function AttendanceDashboard() {
   await dbConnect();
 
   const users = await User.find({ shirtNumber: { $nin: [0, 1] } }).sort({ name: 1 });
-  const allCheckIns = await CheckIn.find({});
+  const allCheckIns = await CheckIn.find({ type: 'training' });
 
-  // 1. Calculate Timelines
+  // 1. Calculate Timelines for Training
   const uniqueDates = new Set(
     allCheckIns.map(record => new Date(record.createdAt).toDateString())
   );
   const dbTotalSessions = uniqueDates.size;
   const totalPossible = LEGACY_TOTAL_SESSIONS + dbTotalSessions;
-  const dbTotalMatchSets = 0; // Phase 2 Placeholder
+  
+  // NEW: Calculate Total Match Balls dynamically. 
+  const maxDbBalls = Math.max(...users.map(u => u.teamMatchBalls || 0), 0);
+  const dbTotalMatchBalls = maxDbBalls;
 
   // 2. Track Team Totals for the Averages
   let totalTeamTrainingAttended = 0;
@@ -44,22 +47,30 @@ export default async function AttendanceDashboard() {
 
   // 3. Process data for all players and attach their role
   const rosterStats = users.map(user => {
+    // Training Math
     const legacyAttended = LEGACY_ATTENDANCE[user.name] || 0;
     const dbAttended = allCheckIns.filter(r => r.playerName === user.name).length;
     const totalAttended = legacyAttended + dbAttended;
     const trainingPct = totalPossible === 0 ? 0 : Math.round((totalAttended / totalPossible) * 100);
     
-    const legacySets = LEGACY_MATCH_SETS[user.name] || 0;
-    const dbSets = 0; 
-    const totalSetsPlayed = legacySets + dbSets;
-    const totalPossibleSets = LEGACY_TOTAL_MATCH_SETS + dbTotalMatchSets;
-    const matchPct = totalPossibleSets === 0 ? 0 : Math.round((totalSetsPlayed / totalPossibleSets) * 100);
+    // NEW: Match Math (Using Exact Balls Played)
+    const dbBallsPlayed = user.matchBallsPlayed || 0;
+    const dbTeamBalls = user.teamMatchBalls || 0;
+
+    const legacyBallsPlayed = LEGACY_MATCH_BALLS[user.name] || 0;
+    const legacyTeamBalls = LEGACY_TOTAL_MATCH_BALLS;
+    
+    // Combine the hardcoded first match with all future database matches
+    const totalBallsPlayed = legacyBallsPlayed + dbBallsPlayed;
+    const totalTeamBalls = legacyTeamBalls + dbTeamBalls;
+    
+    const matchPct = totalTeamBalls === 0 ? 0 : Math.round((totalBallsPlayed / totalTeamBalls) * 100);
 
     // Add to team totals
     totalTeamTrainingAttended += totalAttended;
     totalTeamTrainingPossible += totalPossible;
-    totalTeamMatchPlayed += totalSetsPlayed;
-    totalTeamMatchPossible += totalPossibleSets;
+    totalTeamMatchPlayed += totalBallsPlayed;
+    totalTeamMatchPossible += totalTeamBalls;
 
     return {
       name: user.name,
@@ -67,9 +78,7 @@ export default async function AttendanceDashboard() {
       role: PLAYER_ROLES[user.name] || "Unassigned",
       totalAttended,
       trainingPct,
-      totalSetsPlayed,
-      totalPossibleSets,
-      matchPct
+      matchPct // Only passing the final percentage to the UI now
     };
   });
 
@@ -77,7 +86,6 @@ export default async function AttendanceDashboard() {
   const teamAvgTrainingPct = totalTeamTrainingPossible === 0 ? 0 : Math.round((totalTeamTrainingAttended / totalTeamTrainingPossible) * 100);
   const teamAvgMatchPct = totalTeamMatchPossible === 0 ? 0 : Math.round((totalTeamMatchPlayed / totalTeamMatchPossible) * 100);
 
-  // Define the visual order of the sections
   const roleOrder = ["Pass", "Neben", "Mitte", "Dia", "Libera", "Unassigned"];
 
   return (
@@ -88,7 +96,7 @@ export default async function AttendanceDashboard() {
         <div className="flex justify-between items-center mb-6">
           <div>
             <h1 className="text-3xl font-bold text-indigo-600">Depth Chart & Court Time</h1>
-            <p className="text-slate-500 mt-1">Total Training Sessions: {totalPossible} | Total Match Sets: {LEGACY_TOTAL_MATCH_SETS + dbTotalMatchSets}</p>
+            <p className="text-slate-500 mt-1">Total Training Sessions: {totalPossible} | Total Match Balls: {dbTotalMatchBalls}</p>
           </div>
           <a href="/admin" className="bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-lg font-bold shadow-sm hover:bg-slate-50">
             ← Back to Admin
@@ -100,6 +108,10 @@ export default async function AttendanceDashboard() {
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col items-center justify-center">
             <span className="text-slate-400 text-sm font-bold uppercase tracking-widest mb-2">Team Training Average</span>
             <span className="text-5xl font-black text-indigo-600">{teamAvgTrainingPct}%</span>
+          </div>
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col items-center justify-center">
+            <span className="text-slate-400 text-sm font-bold uppercase tracking-widest mb-2">Team Match Average</span>
+            <span className="text-5xl font-black text-blue-600">{teamAvgMatchPct}%</span>
           </div>
         </div>
 
@@ -145,7 +157,7 @@ export default async function AttendanceDashboard() {
 
                       {/* Match Bar Row */}
                       <div className="flex items-center gap-4">
-                        <span className="w-[100px] text-xs font-bold text-slate-400 uppercase tracking-widest text-right shrink-0">Match Sets</span>
+                        <span className="w-[100px] text-xs font-bold text-slate-400 uppercase tracking-widest text-right shrink-0">Match Playtime</span>
                         <div className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden">
                           <div 
                             className="bg-blue-500 h-4 rounded-full transition-all" 
@@ -162,7 +174,6 @@ export default async function AttendanceDashboard() {
             </div>
           );
         })}
-
       </div>
     </div>
   );
