@@ -16,25 +16,6 @@ export const LEGACY_ATTENDANCE: Record<string, number> = {
   "Yarina": 12
 };
 
-export const LEGACY_TOTAL_MATCH_BALLS = 200; 
-
-// NEW: The old decimals multiplied by 45 and rounded
-export const LEGACY_MATCH_BALLS: Record<string, number> = {
-  "Ainoa": 0,   
-  "Anaïs": 160, 
-  "Eda": 120,   
-  "Eli": 120, 
-  "Elonie": 27, 
-  "Jeanne": 138, 
-  "Laura": 62,  
-  "Maria": 160, 
-  "Seraina": 90, 
-  "Sofia": 120, 
-  "Tina": 120, 
-  "Vera": 110, 
-  "Yarina": 173 
-};
-
 export const PLAYER_ROLES: Record<string, string> = {
   "Jeanne": "Pass", "Laura": "Pass",
   "Yarina": "Libera", "Elonie": "Libera",
