@@ -50,7 +50,6 @@ interface SetData {
 export default function MatchBoardClient({ initialPlayers }: { initialPlayers: Player[] }) {
   const [court, setCourt] = useState<(string | null)[]>([null, null, null, null, null, null]);
   const [libero, setLibero] = useState<string | null>(null);
-  const [benchPartners, setBenchPartners] = useState<(string | null)[]>([null, null, null, null, null, null]);
   const [activeBox, setActiveBox] = useState<number | 'libero' | null>(null);
 
   const [currentSetNumber, setCurrentSetNumber] = useState<number>(1);
@@ -67,7 +66,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [matchFinished, setMatchFinished] = useState<boolean>(false);
 
-  // 1. RECOVERY: Check for a live match when the iPad loads
+  // 1. RECOVERY
   useEffect(() => {
     const fetchLiveMatch = async () => {
       try {
@@ -121,8 +120,76 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
     return names;
   }, [court, libero]);
 
+  // NEW: Determine D5 and Opponent Wins automatically
+  const { d5Wins, oppWins } = useMemo(() => {
+    let d5 = 0;
+    let opp = 0;
+    matchSets.forEach(s => {
+      if (s.finalScore) {
+        const match = s.finalScore.match(/^(\d+):(\d+)$/);
+        if (match) {
+          const s1 = parseInt(match[1], 10);
+          const s2 = parseInt(match[2], 10);
+          if (s1 > s2) d5++;
+          else if (s2 > s1) opp++;
+        }
+      }
+    });
+    return { d5Wins: d5, oppWins: opp };
+  }, [matchSets]);
+
+  const isMatchOver = d5Wins === 3 || oppWins === 3;
+
+  // NEW: FIVB Rule Tracker - Find players who have completed a full sub cycle
+  const burnedPlayers = useMemo(() => {
+    const currentSet = matchSets.find(s => s.setNumber === currentSetNumber);
+    if (!currentSet) return new Set<string>();
+
+    const burned = new Set<string>();
+    const ins = new Set<string>();
+    const outs = new Set<string>();
+
+    currentSet.substitutions.forEach(sub => {
+      ins.add(sub.playerIn);
+      outs.add(sub.playerOut);
+    });
+
+    // If a player subbed OUT and IN during the same set, they are locked out!
+    initialPlayers.forEach(p => {
+      if (ins.has(p.name) && outs.has(p.name)) {
+        burned.add(p.name);
+      }
+    });
+
+    return burned;
+  }, [matchSets, currentSetNumber, initialPlayers]);
+
+  // NEW: Dynamically calculate bench partners so it survives page reloads
+  const benchPartners = useMemo(() => {
+    const partners: (string | null)[] = [null, null, null, null, null, null];
+    const currentSet = matchSets.find(s => s.setNumber === currentSetNumber);
+    if (!currentSet) return partners;
+
+    court.forEach((activePlayer, idx) => {
+      if (!activePlayer) return;
+
+      let waitingPartner: string | null = null;
+      currentSet.substitutions.forEach(sub => {
+        if (sub.playerIn === activePlayer) waitingPartner = sub.playerOut;
+        if (sub.playerOut === activePlayer) waitingPartner = null;
+      });
+
+      // Only assign them to the bench if they haven't burned their re-entry
+      if (waitingPartner && !burnedPlayers.has(waitingPartner)) {
+        partners[idx] = waitingPartner;
+      }
+    });
+    return partners;
+  }, [matchSets, currentSetNumber, court, burnedPlayers]);
+
+
   const handleSelectPlayer = (playerName: string) => {
-    if (activeBox === null) return;
+    if (activeBox === null || isMatchOver) return;
 
     if (activeBox === 'libero') {
       setLibero(playerName);
@@ -132,6 +199,13 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
 
     if (matchStarted && court[activeBox] !== null) {
       const playerOut = court[activeBox] as string;
+
+      // NEW: Block burned players from being subbed out
+      if (burnedPlayers.has(playerOut)) {
+        alert(`FIVB Regelverstoß: ${playerOut} darf in diesem Satz nicht mehr ausgewechselt werden!`);
+        setActiveBox(null);
+        return;
+      }
 
       if (currentSetSubsCount >= 6) {
         alert("Maximale Anzahl von 6 Auswechslungen pro Satz erreicht!");
@@ -187,17 +261,9 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
 
     const newCourt = [...court];
     newCourt[boxIndex] = playerIn;
-    
-    const newBenchPartners = [...benchPartners];
-    if (newBenchPartners[boxIndex] === playerIn) {
-      newBenchPartners[boxIndex] = null; 
-    } else {
-      newBenchPartners[boxIndex] = playerOut;
-    }
 
     setMatchSets(updatedSets);
     setCourt(newCourt);
-    setBenchPartners(newBenchPartners);
     setSubModal(null);
     setSubScoreInput('');
 
@@ -276,7 +342,6 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
     setFinalScoreInput('');
     setCurrentSetNumber(prev => prev + 1);
     setMatchStarted(false);
-    setBenchPartners([null, null, null, null, null, null]);
 
     autoSaveDraft(court, libero, updatedSets, currentSetNumber + 1);
   };
@@ -309,22 +374,10 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
       next[1] = prev[0]; next[2] = prev[1]; next[5] = prev[2];
       return next;
     });
-    setBenchPartners(prev => {
-      const next = [...prev];
-      next[4] = prev[5]; next[3] = prev[4]; next[0] = prev[3];
-      next[1] = prev[0]; next[2] = prev[1]; next[5] = prev[2];
-      return next;
-    });
   };
 
   const rotateBackward = () => {
     setCourt(prev => {
-      const next = [...prev];
-      next[5] = prev[4]; next[4] = prev[3]; next[3] = prev[0];
-      next[0] = prev[1]; next[1] = prev[2]; next[2] = prev[5];
-      return next;
-    });
-    setBenchPartners(prev => {
       const next = [...prev];
       next[5] = prev[4]; next[4] = prev[3]; next[3] = prev[0];
       next[0] = prev[1]; next[1] = prev[2]; next[2] = prev[5];
@@ -375,27 +428,35 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
       <div className="flex-1 flex flex-col items-center">
         <div className="flex justify-between items-center w-full max-w-2xl mb-6">
           <div>
-            <h1 className="text-2xl font-black text-white tracking-wider">🏐 Satz {currentSetNumber} {matchStarted ? '(Live)' : '(Aufstellung)'}</h1>
-            {matchStarted && (
+            {/* NEW: Display Match Over state */}
+            <h1 className="text-2xl font-black text-white tracking-wider">
+              {isMatchOver ? `🏆 Match Ende (${d5Wins} : ${oppWins})` : `🏐 Satz ${currentSetNumber} ${matchStarted ? '(Live)' : '(Aufstellung)'}`}
+            </h1>
+            {!isMatchOver && matchStarted && (
               <p className="text-xs font-bold text-amber-400 mt-1 uppercase tracking-widest">
                 Auswechslungen: {currentSetSubsCount} / 6
               </p>
             )}
           </div>
+          
+          {/* NEW: Smart Top Right Buttons */}
           <div className="flex gap-3">
-            {!matchStarted ? (
-              <button onClick={startMatchOrSet} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition-all">
-                ▶ Start Satz {currentSetNumber}
+            {isMatchOver ? (
+              <button onClick={finishMatch} disabled={isSaving} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-xl font-black shadow-[0_0_20px_rgba(37,99,235,0.5)] transition-all animate-pulse flex items-center gap-2">
+                {isSaving ? 'Speichere...' : '🏆 Match Abschließen'}
               </button>
             ) : (
-              <button onClick={openEndSetModal} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition-all">
-                🏁 Satz Beenden
-              </button>
-            )}
-            {currentSetNumber > 3 && (
-              <button onClick={finishMatch} disabled={isSaving} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition-all">
-                {isSaving ? 'Speichere...' : 'Match Abschließen'}
-              </button>
+              <>
+                {!matchStarted ? (
+                  <button onClick={startMatchOrSet} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition-all">
+                    ▶ Start Satz {currentSetNumber}
+                  </button>
+                ) : (
+                  <button onClick={openEndSetModal} className="bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition-all">
+                    🏁 Satz Beenden
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -438,6 +499,11 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
                   
                   {playerObj ? (
                     <>
+                      {/* NEW: Show lock icon if player is burned */}
+                      {burnedPlayers.has(playerObj.name) && matchStarted && (
+                        <span className="absolute top-1 right-2 text-sm opacity-75" title="Gesperrt (FIVB)">🔒</span>
+                      )}
+
                       <div className="flex flex-col items-center justify-center w-full mt-2">
                         <span className="text-2xl sm:text-3xl font-black leading-none opacity-90">#{playerObj.number}</span>
                         <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider opacity-90 truncate max-w-[100px]">{playerObj.name}</span>
@@ -465,13 +531,14 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
           )}
 
           <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-6">
-            <button onClick={rotateBackward} className="px-4 py-3 bg-slate-800/80 border border-slate-700 rounded-xl text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-bold flex items-center gap-2">
+            <button onClick={rotateBackward} disabled={isMatchOver} className="px-4 py-3 bg-slate-800/80 border border-slate-700 rounded-xl text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-bold flex items-center gap-2 disabled:opacity-30">
               <span className="text-lg">⟲</span> Rotation zurück
             </button>
             
             <button
               onClick={() => setActiveBox('libero')}
-              className={`relative flex flex-col items-center justify-center rounded-2xl border-2 transition-all shadow-lg w-32 h-20 backdrop-blur-sm overflow-hidden
+              disabled={isMatchOver}
+              className={`relative flex flex-col items-center justify-center rounded-2xl border-2 transition-all shadow-lg w-32 h-20 backdrop-blur-sm overflow-hidden disabled:opacity-30
                 ${activeBox === 'libero' 
                   ? libero ? `${getRoleColors('Libera')} scale-110 ring-2 ring-white shadow-xl` : 'bg-yellow-500/20 border-yellow-400/50 scale-110 ring-2 ring-white text-yellow-200'
                   : libero ? `${getRoleColors('Libera')} hover:scale-105` 
@@ -486,7 +553,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
               ) : <span className="font-bold text-2xl">+</span>}
             </button>
 
-            <button onClick={rotateForward} className="px-4 py-3 bg-slate-800/80 border border-slate-700 rounded-xl text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-bold flex items-center gap-2">
+            <button onClick={rotateForward} disabled={isMatchOver} className="px-4 py-3 bg-slate-800/80 border border-slate-700 rounded-xl text-slate-300 hover:bg-slate-700 hover:text-white transition-all text-sm font-bold flex items-center gap-2 disabled:opacity-30">
               Rotation vor <span className="text-lg">⟳</span>
             </button>
           </div>
@@ -507,6 +574,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
 
             const availablePlayers = players.filter((p: any) => {
               if (activeOnCourtNames.has(p.name)) return false; 
+              if (burnedPlayers.has(p.name)) return false; // NEW: Hide burned players from the bench drawer entirely
               if (requiredBenchPlayer) return p.name === requiredBenchPlayer; 
               if (benchPartners.includes(p.name)) return false; 
               return true;

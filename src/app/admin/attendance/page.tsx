@@ -5,8 +5,6 @@ import CheckIn from '@/models/CheckIn';
 import { 
   LEGACY_ATTENDANCE, 
   LEGACY_TOTAL_SESSIONS,
-  LEGACY_MATCH_BALLS,         
-  LEGACY_TOTAL_MATCH_BALLS,    
   PLAYER_ROLES
 } from '@/lib/attendanceConfig';
 
@@ -36,6 +34,7 @@ export default async function AttendanceDashboard() {
   const totalPossible = LEGACY_TOTAL_SESSIONS + dbTotalSessions;
   
   // NEW: Calculate Total Match Balls dynamically. 
+  // This represents the absolute maximum balls the team has played this season.
   const maxDbBalls = Math.max(...users.map(u => u.teamMatchBalls || 0), 0);
   const dbTotalMatchBalls = maxDbBalls;
 
@@ -53,24 +52,17 @@ export default async function AttendanceDashboard() {
     const totalAttended = legacyAttended + dbAttended;
     const trainingPct = totalPossible === 0 ? 0 : Math.round((totalAttended / totalPossible) * 100);
     
-    // NEW: Match Math (Using Exact Balls Played)
+    // NEW: Match Math (Global Season Percentage)
     const dbBallsPlayed = user.matchBallsPlayed || 0;
-    const dbTeamBalls = user.teamMatchBalls || 0;
-
-    const legacyBallsPlayed = LEGACY_MATCH_BALLS[user.name] || 0;
-    const legacyTeamBalls = LEGACY_TOTAL_MATCH_BALLS;
     
-    // Combine the hardcoded first match with all future database matches
-    const totalBallsPlayed = legacyBallsPlayed + dbBallsPlayed;
-    const totalTeamBalls = legacyTeamBalls + dbTeamBalls;
-    
-    const matchPct = totalTeamBalls === 0 ? 0 : Math.round((totalBallsPlayed / totalTeamBalls) * 100);
+    // Instead of using their personal teamMatchBalls, we divide by the absolute team total
+    const matchPct = dbTotalMatchBalls === 0 ? 0 : Math.round((dbBallsPlayed / dbTotalMatchBalls) * 100);
 
     // Add to team totals
     totalTeamTrainingAttended += totalAttended;
     totalTeamTrainingPossible += totalPossible;
-    totalTeamMatchPlayed += totalBallsPlayed;
-    totalTeamMatchPossible += totalTeamBalls;
+    totalTeamMatchPlayed += dbBallsPlayed;
+    totalTeamMatchPossible += dbTotalMatchBalls;
 
     return {
       name: user.name,
@@ -78,11 +70,13 @@ export default async function AttendanceDashboard() {
       role: PLAYER_ROLES[user.name] || "Unassigned",
       totalAttended,
       trainingPct,
-      matchPct // Only passing the final percentage to the UI now
+      matchPct 
     };
   });
 
   // Calculate Team Averages
+  // Because 6 players are on the court at once out of ~13 total players, 
+  // your Team Match Average will naturally sit around 46% (6/13) which is mathematically perfect!
   const teamAvgTrainingPct = totalTeamTrainingPossible === 0 ? 0 : Math.round((totalTeamTrainingAttended / totalTeamTrainingPossible) * 100);
   const teamAvgMatchPct = totalTeamMatchPossible === 0 ? 0 : Math.round((totalTeamMatchPlayed / totalTeamMatchPossible) * 100);
 
