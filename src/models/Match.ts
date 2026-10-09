@@ -5,7 +5,8 @@ const matchSchema = new Schema({
   currentSetNumber: { type: Number, default: 1 },
   court: [{ type: String }],
   libero: { type: String },
-  sets: { type: Schema.Types.Mixed, default: [] } // Stores all the substitutions and scores
+  opponentName: { type: String, default: 'Unbekannt' },
+  sets: { type: Schema.Types.Mixed, default: [] } 
 }, { timestamps: true });
 
 const Match = models.Match || mongoose.model('Match', matchSchema);
