@@ -11,7 +11,7 @@ export const LEGACY_ATTENDANCE: Record<string, number> = {
   "Maria": 17,
   "Seraina": 12,
   "Sofia": 19,
-  "Tina": 16,
+  "Tina": 13,
   "Vera": 15,
   "Yarina": 12
 };
