@@ -1,10 +1,9 @@
 'use client'
 
 import { useState } from 'react';
-import { TEAM_ROSTER } from '@/lib/players';
 import { handleVote } from '../actions';
 
-export default function VotingClient({ userName }: { userName: string }) {
+export default function VotingClient({ userName, roster }: { userName: string, roster: string[] }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const onVote = async (formData: FormData) => {
@@ -19,7 +18,7 @@ export default function VotingClient({ userName }: { userName: string }) {
   };
 
   // Remove the currently logged-in player from the voting options
-  const filteredRoster = TEAM_ROSTER.filter(name => name !== userName);
+  const filteredRoster = roster.filter(name => name !== userName);
 
   return (
     <main className="min-h-screen bg-slate-100 py-12 px-4 text-slate-900">

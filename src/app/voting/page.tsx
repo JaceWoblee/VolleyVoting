@@ -1,23 +1,20 @@
 import { cookies } from 'next/headers';
-import { redirect } from 'next/navigation';
 import dbConnect from '@/lib/db';
 import User from '@/models/User';
 import VotingClient from './VotingClient';
 
+export const dynamic = 'force-dynamic';
+
 export default async function VotingPage() {
   const cookieStore = await cookies();
-  const session = cookieStore.get('player_session');
+  // Keep whatever cookie logic you already have here:
+  const userName = cookieStore.get('player_session')?.value || 'Unknown'; // (Your existing cookie name)
 
-  // If no cookie, kick them to login
-  if (!session) redirect('/');
-
+  // Fetch the live roster from MongoDB
   await dbConnect();
-  const user = await User.findOne({ shirtNumber: Number(session.value) });
+  const users = await User.find({ shirtNumber: { $nin: [0, 1] } }).sort({ name: 1 });
+  const roster = users.map(u => u.name);
 
-  if (!user) redirect('/');
-  
-  // If they somehow guessed the URL but already voted, kick them back to home
-  if (user.hasVoted) redirect('/home');
-
-  return <VotingClient userName={user.name} />;
+  // Pass the new roster prop
+  return <VotingClient userName={userName} roster={roster} />;
 }
