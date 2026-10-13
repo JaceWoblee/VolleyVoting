@@ -11,7 +11,15 @@ export default async function MatchPage() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const users = await User.find({ shirtNumber: { $nin: [0, 1] } });
+  const users = await User.find({ shirtNumber: { $nin: [0, 1] } }).sort({ shirtNumber: 1 });
+  
+  const initialPlayers = users.map(u => ({
+    name: u.name,
+    number: u.shirtNumber,
+    role: u.role || 'Unassigned', 
+    mental: 5,
+    physical: 5
+  }));
 
   const matchCheckIns = await CheckIn.find({
     type: 'match',
@@ -19,20 +27,13 @@ export default async function MatchPage() {
   });
 
   const checkedInPlayers = matchCheckIns.map(record => {
+    // We already find the matching user in the database right here
     const userDoc = users.find(u => u.name === record.playerName);
     
-    const roleMap: Record<string, string> = {
-      "Jeanne": "Pass", "Laura": "Pass",
-      "Yarina": "Libera", "Elonie": "Libera",
-      "Ainoa": "Neben", "Maria": "Neben", "Eda": "Neben", "Sofia": "Neben",
-      "Vera": "Dia", "Seraina": "Dia",
-      "Anaïs": "Mitte", "Tina": "Mitte", "Eli": "Mitte"
-    };
-
     return {
       name: record.playerName,
       number: userDoc ? userDoc.shirtNumber : 0,
-      role: roleMap[record.playerName] || "Neben",
+      role: userDoc?.role || "Unassigned", // <-- Now dynamically using the DB role
       mental: record.mentalHealth,
       physical: record.physicalHealth
     };

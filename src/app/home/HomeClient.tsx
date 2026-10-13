@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { sendFeedback, submitPollVote } from '../actions'; 
-import { LEGACY_ATTENDANCE, LEGACY_TOTAL_SESSIONS } from '@/lib/attendanceConfig';
 
 export default function HomeClient({ messages, currentUser, polls = [], allCheckIns = [] }: any) {
   const [feedback, setFeedback] = useState('');
@@ -16,17 +15,13 @@ export default function HomeClient({ messages, currentUser, polls = [], allCheck
   const SEASON_START = new Date('2026-09-01');
 
   const calculateTrueAttendance = (playerName: string, checkIns: any[]) => {
-    const legacyAttended = LEGACY_ATTENDANCE[playerName] || 0;
     
     const uniqueDates = new Set(
       checkIns.map(record => new Date(record.createdAt).toDateString())
     );
-    const dbTotalSessions = uniqueDates.size;
+    const totalPossible = uniqueDates.size;
     
-    const dbAttended = checkIns.filter(record => record.playerName === playerName).length;
-    
-    const totalAttended = legacyAttended + dbAttended;
-    const totalPossible = LEGACY_TOTAL_SESSIONS + dbTotalSessions;
+    const totalAttended = checkIns.filter(record => record.playerName === playerName).length;
     
     const percentage = totalPossible === 0 ? 0 : Math.round((totalAttended / totalPossible) * 100);
     

@@ -6,11 +6,12 @@ import User from '@/models/User';
 import Vote from '@/models/Vote';
 import Message from '@/models/Message';
 import ResetButton from './ResetButton';
-import BonusButton from '@/components/BonusButton';
 import PollManager from './PollManager';
 import Poll from '@/models/Poll';
 import PollVote from '@/models/PollVote';
-import { syncUserVotes, resetPlayerPin, exemptPlayer } from '../actions';
+import { syncUserVotes, exemptPlayer } from '../actions';
+import FeedbackList from './FeedbackList';
+import PlayerManager from './PlayerManager';
 
 const SEASON_START = new Date('2026-09-01');
 
@@ -124,25 +125,8 @@ export default async function AdminPage() {
               )}
             </div>
           </div>
-
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h2 className="text-xl font-bold mb-4">👤 Player PIN Management</h2>
-            <div className="max-h-48 overflow-y-auto space-y-2">
-              {users.map((user) => (
-                <div key={user.shirtNumber} className="flex items-center justify-between text-sm border-b pb-2 pt-1">
-                  <span className="font-medium">#{user.shirtNumber} {user.name}</span>
-                  <div className="flex items-center gap-2">
-                    <form action={async () => { "use server"; await resetPlayerPin(user.shirtNumber); }}>
-                      <button className="text-[10px] bg-slate-100 hover:bg-red-100 px-2 py-1 rounded font-bold uppercase transition-colors">
-                        Reset PIN
-                      </button>
-                    </form>
-                    <BonusButton shirtNumber={user.shirtNumber} playerName={user.name} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+            {/* REPLACED: Full dynamic Player Manager */}
+            <PlayerManager users={JSON.parse(JSON.stringify(users))} />
         </div>
 
         {/* SECTION 2: PILLARS PROGRESS */}
@@ -188,42 +172,22 @@ export default async function AdminPage() {
         </div>
 
         {/* SECTION 3: MESSAGES */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-          <h2 className="text-xl font-bold mb-4">📥 Player Feedback</h2>
-          <div className="space-y-4">
-            {feedbackForAdmin.length > 0 ? (
-              feedbackForAdmin.map((msg: any) => (
-                <div key={msg._id.toString()} className="p-4 bg-slate-50 rounded-lg border border-slate-100">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-bold text-indigo-600 uppercase">
-                      {msg.isAnonymous ? "Anonym" : msg.playerName}
-                    </span>
-                    <span className="text-[10px] text-slate-400">
-                      {new Date(msg.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
-                    {msg.text}
-                  </p>
-                </div>
-              ))
-            ) : (
-              <p className="text-slate-400 text-sm italic">No feedback for coach yet.</p>
-            )}
-          </div>
-        </div>
+        <FeedbackList 
+          messages={feedbackForAdmin.map((m: any) => ({
+            _id: m._id.toString(),
+            text: m.text,
+            isAnonymous: m.isAnonymous,
+            playerName: m.playerName,
+            createdAt: m.createdAt.toISOString()
+          }))} 
+        />
 
         <PollManager polls={polls} pollVotes={pollVotes} />
 
         {/* SECTION 4: SYSTEM TOOLS */}
         <div className="pt-8 border-t border-slate-200 flex gap-4 items-start">
           <form action={async () => { "use server"; await syncUserVotes(); }}>
-            <button type="submit" className="bg-indigo-600 text-white px-4 py-3 rounded-xl hover:bg-indigo-700 transition-colors font-bold shadow-md">
-              🔄 SYNC VOTE COUNTS
-            </button>
           </form>
-
-          {/* This places your two-button control panel cleanly on the page */}
           <ResetButton />
         </div>
 

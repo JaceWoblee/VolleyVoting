@@ -2,14 +2,6 @@
 
 import { useState } from 'react';
 
-const PLAYER_ROLES: Record<string, string> = {
-  "Jeanne": "Pass", "Laura": "Pass",
-  "Yarina": "Libera", "Elonie": "Libera",
-  "Ainoa": "Neben", "Maria": "Neben", "Eda": "Neben", "Sofia": "Neben",
-  "Vera": "Dia", "Seraina": "Dia",
-  "Anaïs": "Mitte", "Tina": "Mitte", "Eli": "Mitte"
-};
-
 const ROLE_ORDER = ["Pass", "Neben", "Mitte", "Dia", "Libera", "Unassigned"];
 
 const getRoleBadge = (role: string) => {
@@ -185,7 +177,10 @@ export default function MatchesClient({ matches, allPlayers }: { matches: any[];
                   <div className="space-y-4">
                     {ROLE_ORDER.map(role => {
                       const attendingInRole = Array.from(attendedPlayers)
-                        .filter(name => (PLAYER_ROLES[name] || 'Unassigned') === role)
+                        .filter(name => {
+                          const dbPlayer = allPlayers.find(p => p.name === name);
+                          return (dbPlayer?.role || 'Unassigned') === role;
+                        })
                         .sort();
 
                       if (attendingInRole.length === 0) return null;

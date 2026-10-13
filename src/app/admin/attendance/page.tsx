@@ -2,11 +2,6 @@ import { cookies } from 'next/headers';
 import dbConnect from '@/lib/db';
 import User from '@/models/User';
 import CheckIn from '@/models/CheckIn';
-import { 
-  LEGACY_ATTENDANCE, 
-  LEGACY_TOTAL_SESSIONS,
-  PLAYER_ROLES
-} from '@/lib/attendanceConfig';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,8 +28,7 @@ export default async function AttendanceDashboard() {
     )
   ).sort((a: string, b: string) => new Date(a).getTime() - new Date(b).getTime());
 
-  const dbTotalSessions = uniqueDatesArray.length;
-  const totalPossible = LEGACY_TOTAL_SESSIONS + dbTotalSessions;
+  const totalPossible = uniqueDatesArray.length;
   
   // Extract the last 10 unique training sessions for the recent streak display
   const recentTrainingDates = uniqueDatesArray.slice(-10);
@@ -51,9 +45,7 @@ export default async function AttendanceDashboard() {
 
   // 4. Process data for all players and attach their recent training streak
   const rosterStats = users.map(user => {
-    const legacyAttended = LEGACY_ATTENDANCE[user.name] || 0;
-    const dbAttended = allTrainingCheckIns.filter(r => r.playerName === user.name).length;
-    const totalAttended = legacyAttended + dbAttended;
+    const totalAttended = allTrainingCheckIns.filter(r => r.playerName === user.name).length;
     const trainingPct = totalPossible === 0 ? 0 : Math.round((totalAttended / totalPossible) * 100);
     
     const dbBallsPlayed = user.matchBallsPlayed || 0;
@@ -77,7 +69,7 @@ export default async function AttendanceDashboard() {
     return {
       name: user.name,
       shirtNumber: user.shirtNumber,
-      role: PLAYER_ROLES[user.name] || "Unassigned",
+      role: user.role || "Unassigned",
       totalAttended,
       trainingPct,
       matchPct,

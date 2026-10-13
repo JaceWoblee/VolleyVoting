@@ -12,7 +12,6 @@ import Exercise from "@/models/Exercise";
 import SurveyResponse from "@/models/SurveyResponse";
 import Poll from '@/models/Poll';
 import PollVote from '@/models/PollVote';
-
 export async function handleVote(formData: FormData) {
   // 1. Read the cookie to find out who is voting
   const cookieStore = await cookies();
@@ -388,5 +387,75 @@ export async function exemptPlayer(shirtNumber: number) {
     return { success: true };
   } catch (error) {
     return { error: "Failed to excuse player." };
+  }
+}
+
+// CREATE PLAYER
+export async function createPlayer(formData: { name: string; shirtNumber: number; role: string; pin?: string }) {
+  await dbConnect();
+  try {
+    const existing = await User.findOne({ shirtNumber: formData.shirtNumber });
+    if (existing) {
+      return { error: `Trikotnummer #${formData.shirtNumber} ist bereits vergeben!` };
+    }
+
+    const defaultPin = formData.pin?.trim() || String(formData.shirtNumber).padStart(4, '0');
+
+    await User.create({
+      name: formData.name.trim(),
+      shirtNumber: formData.shirtNumber,
+      role: formData.role || 'Unassigned',
+      pin: defaultPin,
+      needsPasswordChange: true
+    });
+
+    revalidatePath('/admin');
+    revalidatePath('/admin/attendance');
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || 'Fehler beim Erstellen der Spielerin' };
+  }
+}
+
+// UPDATE PLAYER (Name, Number, Role)
+export async function updatePlayer(oldShirtNumber: number, data: { name: string; shirtNumber: number; role: string }) {
+  await dbConnect();
+  try {
+    if (data.shirtNumber !== oldShirtNumber) {
+      const existing = await User.findOne({ shirtNumber: data.shirtNumber });
+      if (existing) {
+        return { error: `Trikotnummer #${data.shirtNumber} ist bereits vergeben!` };
+      }
+    }
+
+    await User.findOneAndUpdate(
+      { shirtNumber: oldShirtNumber },
+      { 
+        $set: { 
+          name: data.name.trim(), 
+          shirtNumber: data.shirtNumber, 
+          role: data.role 
+        } 
+      }
+    );
+
+    revalidatePath('/admin');
+    revalidatePath('/admin/attendance');
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || 'Fehler beim Aktualisieren' };
+  }
+}
+
+// DELETE PLAYER
+export async function deletePlayer(shirtNumber: number) {
+  await dbConnect();
+  try {
+    await User.findOneAndDelete({ shirtNumber });
+    revalidatePath('/admin');
+    revalidatePath('/admin/attendance');
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message || 'Fehler beim Löschen' };
   }
 }
