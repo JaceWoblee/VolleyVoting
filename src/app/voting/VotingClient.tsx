@@ -3,12 +3,30 @@
 import { useState } from 'react';
 import { handleVote } from '../actions';
 
-export default function VotingClient({ userName, roster }: { userName: string, roster: string[] }) {
+export default function VotingClient({ 
+  userName, 
+  userNumber,
+  roster 
+}: { 
+  userName: string, 
+  userNumber: number,
+  roster: { name: string, number: number }[] 
+}) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // DOUBLE FAILSAFE: Filter by Database Number OR by Fallback Text Name
+  const safeDecodedName = decodeURIComponent(userName).trim().toLowerCase();
+  
+  const filteredRoster = roster.filter(player => {
+    const isSameNumber = userNumber !== -1 && player.number === userNumber;
+    const isSameName = player.name.trim().toLowerCase() === safeDecodedName;
+    
+    // Keep the player ONLY if both the number and name do NOT match the logged-in user
+    return !isSameNumber && !isSameName;
+  });
 
   const onVote = async (formData: FormData) => {
     setIsSubmitting(true);
-    // Notice we ONLY pass formData now. The server handles the identity via cookie!
     const result = await handleVote(formData); 
     
     if (result?.error) {
@@ -16,9 +34,6 @@ export default function VotingClient({ userName, roster }: { userName: string, r
       setIsSubmitting(false);
     } 
   };
-
-  // Remove the currently logged-in player from the voting options
-  const filteredRoster = roster.filter(name => name !== userName);
 
   return (
     <main className="min-h-screen bg-slate-100 py-12 px-4 text-slate-900">
@@ -32,7 +47,7 @@ export default function VotingClient({ userName, roster }: { userName: string, r
         <form action={onVote} className="bg-white rounded-2xl shadow-xl p-6 border border-slate-200 space-y-6">
           
           <div className="text-center text-slate-500 font-medium italic pb-4 border-b border-slate-100">
-            Hi, {userName}!
+            Hi, {decodeURIComponent(userName)}!
           </div>
 
           {/* VOTE 1: Mental Support */}
@@ -41,7 +56,9 @@ export default function VotingClient({ userName, roster }: { userName: string, r
             <p className="text-[11px] text-slate-500 mb-3">Wer hat dir heute am meisten geholfen?</p>
             <select name="mentalSupport" required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-black font-medium outline-none focus:border-indigo-500">
               <option value="">Wähle eine Spielerin...</option>
-              {filteredRoster.map(name => <option key={name} value={name}>{name}</option>)}
+              {filteredRoster.map(player => (
+                <option key={player.number} value={player.name}>{player.name}</option>
+              ))}
             </select>
           </div>
 
@@ -52,7 +69,9 @@ export default function VotingClient({ userName, roster }: { userName: string, r
             
             <select name="bonusTarget" required className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-black font-medium mb-3 outline-none focus:border-amber-500">
               <option value="">Wer bekommt den Extra-Punkt?</option>
-              {filteredRoster.map(name => <option key={name} value={name}>{name}</option>)}
+              {filteredRoster.map(player => (
+                <option key={player.number} value={player.name}>{player.name}</option>
+              ))}
             </select>
             
             <textarea 

@@ -3,33 +3,17 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 // 1. Change seedPlayers to seedTeam here:
-import { startNewMatch, seedTeam } from '../actions';
+import { startNewMatch} from '../actions';
 
 export default function ResetButton() {
   const router = useRouter();
-  const [isReseeding, setIsReseeding] = useState(false);
+  const [isReseeding] = useState(false);
 
   const handleReset = async () => {
     if (confirm('Are you sure you want to reset all vote blockers for a new match?')) {
       await startNewMatch();
       alert('New match started! Players can vote again.');
       router.refresh();
-    }
-  };
-
-  const handleReseed = async () => {
-    if (confirm("Are you sure? This will DELETE all current users and reload them from the hardcoded list!")) {
-      setIsReseeding(true);
-      // 2. Change seedPlayers() to seedTeam() here:
-      const result = await seedTeam();
-      setIsReseeding(false);
-
-      if (result?.error) {
-        alert(result.error);
-      } else {
-        alert("Players successfully imported for the new season!");
-        router.refresh(); 
-      }
     }
   };
   
@@ -58,11 +42,10 @@ export default function ResetButton() {
           Resetting the database will overwrite the active roster with the data from src/lib/players.ts.
         </p>
         <button 
-          onClick={handleReseed}
           disabled={isReseeding}
           className="bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-xl transition-colors disabled:opacity-50 shadow-md"
         >
-          {isReseeding ? "Importing Roster..." : "⚠️ Reset & Reseed All Players"}
+          {isReseeding ? "Importing Roster..." : "⚠️ Reset All Players"}
         </button>
       </div>
     </div>

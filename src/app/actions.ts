@@ -96,38 +96,6 @@ export async function startNewMatch() {
   revalidatePath('/admin');
 }
 
-export async function seedTeam() {
-  await dbConnect();
-  
-  const players = [
-    { shirtNumber: 0, name: "Yasha", pin: "1337", hasVoted: false, needsPasswordChange: false },
-    { shirtNumber: 1, name: "Test Dummy", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 3, name: "Eda", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 4, name: "Laura", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 5, name: "Eli", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 7, name: "Elonie", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 9, name: "Yarina", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 10, name: "Seraina", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 11, name: "Ainoa", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 14, name: "Jeanne", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 18, name: "Anaïs", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 21, name: "Vera", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 22, name: "Sofia", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 32, name: "Maria", pin: "1234", hasVoted: false, needsPasswordChange: true },
-    { shirtNumber: 82, name: "Tina", pin: "1234", hasVoted: false, needsPasswordChange: true },
-  ];
-
-  try {
-    await User.deleteMany({}); 
-    await User.insertMany(players);
-    revalidatePath('/admin');
-    return { success: true }; // Added return for safety
-  } catch (e) {
-    console.error("Seed Error:", e);
-    return { error: "Seed failed" };
-  }
-}
-
 export async function verifyLogin(shirtNumber: number, pin: string) {
   await dbConnect();
   const user = await User.findOne({ shirtNumber, pin });
