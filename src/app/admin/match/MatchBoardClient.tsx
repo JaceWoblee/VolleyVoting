@@ -483,13 +483,6 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
 
   return (
     <div className="min-h-screen bg-slate-900 p-8 font-sans flex flex-col md:flex-row gap-8 relative">
-      
-      {/* WARNING BANNER */}
-      {!matchStarted && !isMatchOver && (
-        <div className="absolute top-0 left-0 w-full bg-red-600 text-white text-center text-sm font-bold py-1 z-50 tracking-widest shadow-md">
-          AUFSTELLUNGSMODUS — Klicke "Start Satz", um das Spiel und das Tracking zu beginnen!
-        </div>
-      )}
 
       <div className="flex-1 flex flex-col items-center mt-6 md:mt-0">
         <div className="flex justify-between items-center w-full max-w-2xl mb-6">
