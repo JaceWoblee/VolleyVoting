@@ -13,27 +13,23 @@ export default async function MatchPage() {
 
   const users = await User.find({ shirtNumber: { $nin: [0, 1] } }).sort({ shirtNumber: 1 });
   
-  const initialPlayers = users.map(u => ({
-    name: u.name,
-    number: u.shirtNumber,
-    role: u.role || 'Unassigned', 
-    mental: 5,
-    physical: 5
-  }));
-
   const matchCheckIns = await CheckIn.find({
     type: 'match',
     createdAt: { $gte: today }
   });
 
-  const checkedInPlayers = matchCheckIns.map(record => {
-    // We already find the matching user in the database right here
+  // FIX: Deduplicate check-ins to prevent React UI glitches
+  const uniqueCheckIns = matchCheckIns.filter((record, index, self) =>
+    index === self.findIndex((r) => r.playerName === record.playerName)
+  );
+
+  const checkedInPlayers = uniqueCheckIns.map(record => {
     const userDoc = users.find(u => u.name === record.playerName);
     
     return {
       name: record.playerName,
       number: userDoc ? userDoc.shirtNumber : 0,
-      role: userDoc?.role || "Unassigned", // <-- Now dynamically using the DB role
+      role: userDoc?.role || "Unassigned",
       mental: record.mentalHealth,
       physical: record.physicalHealth
     };

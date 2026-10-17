@@ -51,25 +51,18 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
   const [court, setCourt] = useState<(string | null)[]>([null, null, null, null, null, null]);
   const [libero, setLibero] = useState<string | null>(null);
   const [activeBox, setActiveBox] = useState<number | 'libero' | null>(null);
-  
-  // NEW: Opponent Name State
   const [opponentName, setOpponentName] = useState<string>('');
-
   const [currentSetNumber, setCurrentSetNumber] = useState<number>(1);
   const [matchSets, setMatchSets] = useState<SetData[]>([]);
   const [matchStarted, setMatchStarted] = useState<boolean>(false);
-
   const [subModal, setSubModal] = useState<{ playerOut: string; playerIn: string; boxIndex: number } | null>(null);
   const [subScoreInput, setSubScoreInput] = useState<string>('');
-  
   const [isEndingSet, setIsEndingSet] = useState<boolean>(false);
   const [finalScoreInput, setFinalScoreInput] = useState<string>('');
   const [liberoShares, setLiberoShares] = useState<Record<string, number>>({});
-  
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [matchFinished, setMatchFinished] = useState<boolean>(false);
 
-  // 1. RECOVERY
   useEffect(() => {
     const fetchLiveMatch = async () => {
       try {
@@ -93,7 +86,6 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
     fetchLiveMatch();
   }, []);
 
-  // 2. AUTOSAVE HELPER
   const autoSaveDraft = async (updatedCourt: any, updatedLibero: any, updatedSets: any, updatedSetNum: number, updatedOpponent?: string) => {
     try {
       await fetch('/api/match', {
@@ -194,33 +186,48 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
       return;
     }
 
-    if (matchStarted && court[activeBox] !== null) {
-      const playerOut = court[activeBox] as string;
-
-      if (burnedPlayers.has(playerOut)) {
-        alert(`FIVB Regelverstoß: ${playerOut} darf in diesem Satz nicht mehr ausgewechselt werden!`);
+    if (matchStarted) {
+      // FIX: Ensure players aren't magically moved/swapped during a live set without sub rules
+      const existingIndex = court.indexOf(playerName);
+      if (existingIndex !== -1) {
+        alert("Diese Spielerin ist bereits auf dem Feld!");
         setActiveBox(null);
         return;
       }
 
-      if (currentSetSubsCount >= 6) {
-        alert("Maximale Anzahl von 6 Auswechslungen pro Satz erreicht!");
+      if (court[activeBox] !== null) {
+        const playerOut = court[activeBox] as string;
+
+        if (burnedPlayers.has(playerOut)) {
+          alert(`FIVB Regelverstoß: ${playerOut} darf in diesem Satz nicht mehr ausgewechselt werden!`);
+          setActiveBox(null);
+          return;
+        }
+
+        if (currentSetSubsCount >= 6) {
+          alert("Maximale Anzahl von 6 Auswechslungen pro Satz erreicht!");
+          setActiveBox(null);
+          return;
+        }
+
+        const requiredBenchPlayer = benchPartners[activeBox];
+        if (requiredBenchPlayer && playerName !== requiredBenchPlayer) {
+          alert(`Regelverstoß: ${playerOut} kann nur durch ${requiredBenchPlayer} ersetzt werden!`);
+          setActiveBox(null);
+          return;
+        }
+
+        setSubModal({ playerOut, playerIn: playerName, boxIndex: activeBox });
+        setActiveBox(null);
+        return;
+      } else {
+        alert("Fehler: Position ist leer. Einwechslung nicht möglich.");
         setActiveBox(null);
         return;
       }
-
-      const requiredBenchPlayer = benchPartners[activeBox];
-      if (requiredBenchPlayer && playerName !== requiredBenchPlayer) {
-        alert(`Regelverstoß: ${playerOut} kann nur durch ${requiredBenchPlayer} ersetzt werden!`);
-        setActiveBox(null);
-        return;
-      }
-
-      setSubModal({ playerOut, playerIn: playerName, boxIndex: activeBox });
-      setActiveBox(null);
-      return;
     }
 
+    // Lineup mode: free swapping
     const newCourt = [...court];
     const existingIndex = newCourt.indexOf(playerName);
     if (existingIndex !== -1) {
@@ -347,13 +354,63 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
     autoSaveDraft(court, libero, updatedSets, currentSetNumber + 1);
   };
 
+  // CALCULUS: Calculate exact "Balls Played" per player across the entire match
+  const calculateBallsPlayed = () => {
+    const stats: Record<string, number> = {};
+    initialPlayers.forEach(p => stats[p.name] = 0);
+
+    matchSets.forEach(set => {
+      if (!set.finalScore) return;
+      const match = set.finalScore.match(/^(\d+):(\d+)$/);
+      if (!match) return;
+      const totalSetBalls = parseInt(match[1], 10) + parseInt(match[2], 10);
+
+      const entryPoints: Record<string, number> = {};
+
+      set.startingLineup.forEach(p => {
+        if (p) entryPoints[p] = 0;
+      });
+
+      set.substitutions.forEach(sub => {
+        const subMatch = sub.score.match(/^(\d+):(\d+)$/);
+        let subBall = 0;
+        if (subMatch) {
+          subBall = parseInt(subMatch[1], 10) + parseInt(subMatch[2], 10);
+        }
+
+        if (entryPoints[sub.playerOut] !== undefined) {
+          stats[sub.playerOut] += (subBall - entryPoints[sub.playerOut]);
+          delete entryPoints[sub.playerOut];
+        }
+        entryPoints[sub.playerIn] = subBall;
+      });
+
+      Object.keys(entryPoints).forEach(playerName => {
+        stats[playerName] += (totalSetBalls - entryPoints[playerName]);
+      });
+
+      if (set.liberoShares && Object.keys(set.liberoShares).length > 0) {
+        Object.entries(set.liberoShares).forEach(([libName, percent]) => {
+          stats[libName] = (stats[libName] || 0) + Math.round((totalSetBalls * percent) / 100);
+        });
+      } else if (set.libero) {
+        stats[set.libero] = (stats[set.libero] || 0) + totalSetBalls;
+      }
+    });
+
+    return stats;
+  };
+
   const finishMatch = async () => {
     setIsSaving(true);
     try {
+      const playerStats = calculateBallsPlayed();
+
       const res = await fetch('/api/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sets: matchSets, opponentName })
+        // Attached playerStats to the payload for the database log
+        body: JSON.stringify({ sets: matchSets, opponentName, playerStats })
       });
       const data = await res.json();
       if (data.success) {
@@ -426,14 +483,21 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
 
   return (
     <div className="min-h-screen bg-slate-900 p-8 font-sans flex flex-col md:flex-row gap-8 relative">
-      <div className="flex-1 flex flex-col items-center">
+      
+      {/* WARNING BANNER */}
+      {!matchStarted && !isMatchOver && (
+        <div className="absolute top-0 left-0 w-full bg-red-600 text-white text-center text-sm font-bold py-1 z-50 tracking-widest shadow-md">
+          AUFSTELLUNGSMODUS — Klicke "Start Satz", um das Spiel und das Tracking zu beginnen!
+        </div>
+      )}
+
+      <div className="flex-1 flex flex-col items-center mt-6 md:mt-0">
         <div className="flex justify-between items-center w-full max-w-2xl mb-6">
           <div>
             <h1 className="text-2xl font-black text-white tracking-wider">
               {isMatchOver ? `🏆 Match Ende (${d5Wins} : ${oppWins})` : `🏐 Satz ${currentSetNumber} ${matchStarted ? '(Live)' : '(Aufstellung)'}`}
             </h1>
             
-            {/* NEW: Opponent Input / Display */}
             <div className="flex items-center gap-2 mt-2">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Gegner:</span>
               {!matchStarted && currentSetNumber === 1 ? (
@@ -467,7 +531,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
             ) : (
               <>
                 {!matchStarted ? (
-                  <button onClick={startMatchOrSet} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition-all">
+                  <button onClick={startMatchOrSet} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-lg transition-all animate-pulse border-2 border-emerald-400">
                     ▶ Start Satz {currentSetNumber}
                   </button>
                 ) : (
