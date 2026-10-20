@@ -47,6 +47,12 @@ interface SetData {
   liberoShares?: Record<string, number>;
 }
 
+interface SubModalData {
+  primary: { playerOut: string; playerIn: string; boxIndex: number };
+  secondary?: { playerOut: string; playerIn: string; boxIndex: number };
+  useDoubleSub: boolean;
+}
+
 export default function MatchBoardClient({ initialPlayers }: { initialPlayers: Player[] }) {
   const [court, setCourt] = useState<(string | null)[]>([null, null, null, null, null, null]);
   const [libero, setLibero] = useState<string | null>(null);
@@ -55,7 +61,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
   const [currentSetNumber, setCurrentSetNumber] = useState<number>(1);
   const [matchSets, setMatchSets] = useState<SetData[]>([]);
   const [matchStarted, setMatchStarted] = useState<boolean>(false);
-  const [subModal, setSubModal] = useState<{ playerOut: string; playerIn: string; boxIndex: number } | null>(null);
+  const [subModal, setSubModal] = useState<SubModalData | null>(null);
   const [subScoreInput, setSubScoreInput] = useState<string>('');
   const [isEndingSet, setIsEndingSet] = useState<boolean>(false);
   const [finalScoreInput, setFinalScoreInput] = useState<string>('');
@@ -187,7 +193,6 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
     }
 
     if (matchStarted) {
-      // FIX: Ensure players aren't magically moved/swapped during a live set without sub rules
       const existingIndex = court.indexOf(playerName);
       if (existingIndex !== -1) {
         alert("Diese Spielerin ist bereits auf dem Feld!");
@@ -217,7 +222,56 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
           return;
         }
 
-        setSubModal({ playerOut, playerIn: playerName, boxIndex: activeBox });
+        // --- DOPPELWECHSEL LOGIK (Pass <-> Dia) ---
+        let secondarySub: { playerOut: string; playerIn: string; boxIndex: number } | undefined = undefined;
+        const pOutObj = initialPlayers.find(p => p.name === playerOut);
+        const pInObj = initialPlayers.find(p => p.name === playerName);
+
+        if (pOutObj && pInObj) {
+          const isPassDiaSwap = (pOutObj.role === 'Pass' && pInObj.role === 'Dia') ||
+                                (pOutObj.role === 'Dia' && pInObj.role === 'Pass');
+
+          if (isPassDiaSwap && currentSetSubsCount <= 4) {
+            const targetRoleOut = pInObj.role; 
+            const targetRoleIn = pOutObj.role; 
+
+            const otherBoxIndex = court.findIndex((name, idx) => {
+              if (idx === activeBox || !name) return false;
+              const p = initialPlayers.find(x => x.name === name);
+              return p && p.role === targetRoleOut;
+            });
+
+            if (otherBoxIndex !== -1) {
+              const otherPlayerOut = court[otherBoxIndex]!;
+              const requiredOtherBenchPlayer = benchPartners[otherBoxIndex];
+
+              const availableForOther = initialPlayers.filter(p => {
+                if (p.role !== targetRoleIn) return false;
+                if (p.name === playerName) return false; 
+                if (activeOnCourtNames.has(p.name)) return false;
+                if (burnedPlayers.has(p.name)) return false;
+                if (requiredOtherBenchPlayer && p.name !== requiredOtherBenchPlayer) return false;
+                if (!requiredOtherBenchPlayer && benchPartners.includes(p.name)) return false;
+                return true;
+              });
+
+              if (availableForOther.length > 0) {
+                secondarySub = {
+                  playerOut: otherPlayerOut,
+                  playerIn: availableForOther[0].name,
+                  boxIndex: otherBoxIndex
+                };
+              }
+            }
+          }
+        }
+
+        setSubModal({
+          primary: { playerOut, playerIn: playerName, boxIndex: activeBox },
+          secondary: secondarySub,
+          useDoubleSub: !!secondarySub
+        });
+        
         setActiveBox(null);
         return;
       } else {
@@ -241,29 +295,34 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
   const confirmSubstitution = () => {
     if (!subModal) return;
     const score = subScoreInput.trim().replace(/[\s\-]+/g, ':') || '0:0';
-    const { playerOut, playerIn, boxIndex } = subModal;
+    const { primary, secondary, useDoubleSub } = subModal;
 
     let updatedSets = [...matchSets];
     const existingSetIndex = updatedSets.findIndex(s => s.setNumber === currentSetNumber);
-    const subEntry = { playerOut, playerIn, score };
+    
+    const newSubs = [{ playerOut: primary.playerOut, playerIn: primary.playerIn, score }];
+    const newCourt = [...court];
+    newCourt[primary.boxIndex] = primary.playerIn;
+
+    if (useDoubleSub && secondary) {
+      newSubs.push({ playerOut: secondary.playerOut, playerIn: secondary.playerIn, score });
+      newCourt[secondary.boxIndex] = secondary.playerIn;
+    }
     
     if (existingSetIndex >= 0) {
       updatedSets[existingSetIndex] = {
         ...updatedSets[existingSetIndex],
-        substitutions: [...updatedSets[existingSetIndex].substitutions, subEntry]
+        substitutions: [...updatedSets[existingSetIndex].substitutions, ...newSubs]
       };
     } else {
       updatedSets.push({
         setNumber: currentSetNumber,
         startingLineup: [...court],
         libero,
-        substitutions: [subEntry],
+        substitutions: newSubs,
         finalScore: ''
       });
     }
-
-    const newCourt = [...court];
-    newCourt[boxIndex] = playerIn;
 
     setMatchSets(updatedSets);
     setCourt(newCourt);
@@ -354,7 +413,6 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
     autoSaveDraft(court, libero, updatedSets, currentSetNumber + 1);
   };
 
-  // CALCULUS: Calculate exact "Balls Played" per player across the entire match
   const calculateBallsPlayed = () => {
     const stats: Record<string, number> = {};
     initialPlayers.forEach(p => stats[p.name] = 0);
@@ -409,7 +467,6 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
       const res = await fetch('/api/match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Attached playerStats to the payload for the database log
         body: JSON.stringify({ sets: matchSets, opponentName, playerStats })
       });
       const data = await res.json();
@@ -689,12 +746,37 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
 
       {subModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-slate-800 border border-slate-700 p-8 rounded-3xl w-96 shadow-2xl text-white">
-            <h3 className="text-xl font-bold mb-2">Auswechslung ({currentSetSubsCount + 1}/6)</h3>
-            <p className="text-sm text-slate-400 mb-6">
-              <strong className="text-red-400">{subModal.playerOut}</strong> raus, <strong className="text-emerald-400">{subModal.playerIn}</strong> rein.
-            </p>
-            <label className="block text-xs font-bold uppercase text-slate-400 mb-2">Punktestand (D5 : Gegner, z.B. 14:12)</label>
+          <div className="bg-slate-800 border border-slate-700 p-8 rounded-3xl w-[400px] shadow-2xl text-white">
+            <h3 className="text-xl font-bold mb-2">
+              Auswechslung ({currentSetSubsCount + (subModal.useDoubleSub ? 2 : 1)}/6)
+            </h3>
+            
+            <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-700 mb-4">
+              <p className="text-sm font-medium text-slate-300">
+                <strong className="text-red-400">{subModal.primary.playerOut}</strong> raus, <strong className="text-emerald-400">{subModal.primary.playerIn}</strong> rein.
+              </p>
+            </div>
+
+            {subModal.secondary && (
+              <div className="mb-6">
+                <label className="flex items-start gap-3 cursor-pointer bg-indigo-500/10 p-4 rounded-xl border border-indigo-500/30 hover:bg-indigo-500/20 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={subModal.useDoubleSub}
+                    onChange={(e) => setSubModal({...subModal, useDoubleSub: e.target.checked})}
+                    className="w-5 h-5 mt-1 accent-indigo-500 rounded"
+                  />
+                  <div>
+                    <span className="block text-sm font-black text-indigo-300 mb-1 tracking-widest uppercase">Doppelwechsel</span>
+                    <span className="text-sm font-medium text-slate-300">
+                      Gleichzeitig: <strong className="text-red-400">{subModal.secondary.playerOut}</strong> raus, <strong className="text-emerald-400">{subModal.secondary.playerIn}</strong> rein.
+                    </span>
+                  </div>
+                </label>
+              </div>
+            )}
+
+            <label className="block text-xs font-bold uppercase text-slate-400 mb-2">Punktestand (D5 : {opponentName || 'Gegner'}, z.B. 14:12)</label>
             <input 
               type="text" 
               placeholder="14:12" 
@@ -703,8 +785,8 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
               className="w-full bg-slate-900 border border-slate-600 p-3 rounded-xl text-white text-lg font-bold mb-6 outline-none focus:border-indigo-500"
             />
             <div className="flex gap-4">
-              <button onClick={() => setSubModal(null)} className="w-1/2 bg-slate-700 py-3 rounded-xl font-bold hover:bg-slate-600">Abbrechen</button>
-              <button onClick={confirmSubstitution} className="w-1/2 bg-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-500">Bestätigen</button>
+              <button onClick={() => setSubModal(null)} className="w-1/2 bg-slate-700 py-3 rounded-xl font-bold hover:bg-slate-600 transition-colors">Abbrechen</button>
+              <button onClick={confirmSubstitution} className="w-1/2 bg-indigo-600 py-3 rounded-xl font-bold hover:bg-indigo-500 transition-colors shadow-lg">Bestätigen</button>
             </div>
           </div>
         </div>
@@ -715,7 +797,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
           <div className="bg-slate-800 border border-slate-700 p-8 rounded-3xl w-96 shadow-2xl text-white">
             <h3 className="text-xl font-bold mb-2">Satz {currentSetNumber} beenden</h3>
             
-            <label className="block text-xs font-bold uppercase text-slate-400 mb-2 mt-4">Endstand (D5 : Gegner)</label>
+            <label className="block text-xs font-bold uppercase text-slate-400 mb-2 mt-4">Endstand (D5 : {opponentName || 'Gegner'})</label>
             <input 
               type="text" 
               placeholder="25:21" 

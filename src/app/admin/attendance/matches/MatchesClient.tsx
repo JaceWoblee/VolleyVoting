@@ -73,11 +73,27 @@ export default function MatchesClient({ matches, allPlayers }: { matches: any[];
     <div className="space-y-4">
       {matches.map(match => {
         const isExpanded = expandedMatchId === match._id;
+        
+        // Match Datum
         const matchDate = new Date(match.createdAt).toLocaleDateString('de-CH', {
           day: '2-digit',
           month: '2-digit',
           year: 'numeric'
         });
+
+        // Gesamte Match-Dauer berechnen (Start = createdAt, Ende = updatedAt)
+        const startTime = new Date(match.createdAt).getTime();
+        const endTime = match.updatedAt ? new Date(match.updatedAt).getTime() : startTime;
+        const durationMinutes = Math.round((endTime - startTime) / 60000);
+        
+        let durationStr = null;
+        if (durationMinutes > 0) {
+          if (durationMinutes < 60) {
+            durationStr = `${durationMinutes} Min.`;
+          } else {
+            durationStr = `${Math.floor(durationMinutes / 60)}h ${durationMinutes % 60}m`;
+          }
+        }
 
         let d5SetsWon = 0;
         let oppSetsWon = 0;
@@ -122,7 +138,10 @@ export default function MatchesClient({ matches, allPlayers }: { matches: any[];
                       {wonMatch ? 'Sieg' : 'Niederlage'}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400 mt-1">{matchDate} • {match.sets?.length || 0} Sätze gespielt</p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {matchDate} • {match.sets?.length || 0} Sätze gespielt 
+                    {durationStr && <span className="ml-1 text-slate-300 font-medium">• ⏱️ {durationStr}</span>}
+                  </p>
                 </div>
               </div>
 
@@ -145,26 +164,38 @@ export default function MatchesClient({ matches, allPlayers }: { matches: any[];
                 <div>
                   <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Sätze & Spielstände</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                    {(match.sets || []).map((set: any, idx: number) => (
-                      <div key={idx} className="bg-slate-800 p-4 rounded-xl border border-slate-700/60">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-xs font-bold text-slate-400">Satz {set.setNumber || idx + 1}</span>
-                          <span className="text-sm font-black text-indigo-400">{set.finalScore || '—'}</span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-2">
-                          Wechsel: {set.substitutions?.length || 0}
-                        </p>
-                        {set.substitutions && set.substitutions.length > 0 && (
-                          <div className="mt-2 space-y-1">
-                            {set.substitutions.map((sub: any, sIdx: number) => (
-                              <p key={sIdx} className="text-[10px] text-slate-400">
-                                • {sub.playerIn} für {sub.playerOut} ({sub.score})
-                              </p>
-                            ))}
+                    {(match.sets || []).map((set: any, idx: number) => {
+                      // Fallback, falls du später set.startTime / set.endTime in der DB ergänzt
+                      let setDurationStr = null;
+                      if (set.startTime && set.endTime) {
+                        const setMins = Math.round((new Date(set.endTime).getTime() - new Date(set.startTime).getTime()) / 60000);
+                        if (setMins > 0) setDurationStr = `${setMins} Min.`;
+                      }
+
+                      return (
+                        <div key={idx} className="bg-slate-800 p-4 rounded-xl border border-slate-700/60">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-bold text-slate-400">
+                              Satz {set.setNumber || idx + 1}
+                              {setDurationStr && <span className="ml-1 text-slate-500 font-normal">(⏱️ {setDurationStr})</span>}
+                            </span>
+                            <span className="text-sm font-black text-indigo-400">{set.finalScore || '—'}</span>
                           </div>
-                        )}
-                      </div>
-                    ))}
+                          <p className="text-[11px] text-slate-400 mt-2">
+                            Wechsel: {set.substitutions?.length || 0}
+                          </p>
+                          {set.substitutions && set.substitutions.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {set.substitutions.map((sub: any, sIdx: number) => (
+                                <p key={sIdx} className="text-[10px] text-slate-400">
+                                  • {sub.playerIn} für {sub.playerOut} ({sub.score})
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
