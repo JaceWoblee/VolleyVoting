@@ -131,6 +131,8 @@ export default function AnalyticsClient({
   const [dateFilter, setDateFilter] = useState<'all' | '30d' | '7d'>('all');
   const [modeFilter, setModeFilter] = useState<'all' | '6v6' | '8ball'>('all');
   const [fairOnly, setFairOnly] = useState<boolean>(true);
+  const [min5PassBalance, setMin5PassBalance] = useState<boolean>(true);
+  const [true6v6Only, setTrue6v6Only] = useState<boolean>(false);
   const [minRallies, setMinRallies] = useState<number>(10);
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [copied, setCopied] = useState<boolean>(false);
@@ -158,6 +160,22 @@ export default function AnalyticsClient({
     const pairsMap = new Map<string, { p1: string; p2: string; rallies: number; wins: number }>();
     const numToName = new Map<number, string>();
     const matchSummaries: MatchSummary[] = [];
+    const numToRole = new Map<number, string>();
+
+    const countRoles = (nums: number[]) => {
+      const c: Record<string, number> = { Pass: 0, Neben: 0, Mitte: 0, Libera: 0, Dia: 0 };
+      nums.forEach((n) => {
+        const r = numToRole.get(n);
+        if (r && r in c) c[r]++;
+      });
+      return c;
+    };
+
+    const isTrue6v6Side = (nums: number[]) => {
+      if (nums.length !== 6) return false;
+      const c = countRoles(nums);
+      return c.Neben === 2 && c.Pass === 1 && c.Mitte === 1 && c.Libera === 1 && c.Dia === 1;
+    };
 
     let totalRallies = 0;
     let totalMatchSets = 0;
@@ -229,6 +247,7 @@ export default function AnalyticsClient({
       g.checkInSnapshot.forEach((c) => {
         if (c.shirtNumber > 0 && c.name) {
           numToName.set(c.shirtNumber, c.name.trim());
+          if (c.role) numToRole.set(c.shirtNumber, c.role);
           ensurePlayer(c.name, c.shirtNumber, c.role);
         }
       });
@@ -289,6 +308,17 @@ export default function AnalyticsClient({
           }
 
           if (fairOnly && !isFair) return;
+
+          if (min5PassBalance) {
+            if (pt.teamA.length < 5 || pt.teamB.length < 5) return;
+            const passA = countRoles(pt.teamA).Pass > 0;
+            const passB = countRoles(pt.teamB).Pass > 0;
+            if (passA !== passB) return;
+          }
+
+          if (true6v6Only) {
+            if (!isTrue6v6Side(pt.teamA) || !isTrue6v6Side(pt.teamB)) return;
+          }
           totalRallies++;
 
           const processSide = (sideNums: number[], won: boolean) => {
@@ -492,7 +522,7 @@ export default function AnalyticsClient({
       eighthBallServeWins,
       eighthBallServeTotal,
     };
-  }, [games, filteredGames, filteredMatches, sourceFilter, modeFilter, fairOnly]);
+  }, [games, filteredGames, filteredMatches, sourceFilter, modeFilter, fairOnly, min5PassBalance, true6v6Only]);
 
   const activePlayerName = selectedPlayer ?? stats.playersList[0]?.name ?? null;
 
@@ -640,33 +670,41 @@ export default function AnalyticsClient({
 
             {/* TRAINING MODE FILTER (hidden when Match-only) */}
             {sourceFilter !== 'match' && (
-              <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-700 font-bold">
-                {([['all', '6v6 + 8-Ball'], ['6v6', 'Nur 6v6'], ['8ball', 'Nur 8-Ball']] as const).map(([val, label]) => (
-                  <button
-                    key={val}
-                    onClick={() => setModeFilter(val)}
-                    className={`px-3 py-1 rounded-lg ${modeFilter === val ? 'bg-indigo-600 text-white' : 'text-slate-400'}`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <>
+                <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={fairOnly}
+                    onChange={(e) => setFairOnly(e.target.checked)}
+                    className="accent-emerald-500 w-4 h-4"
+                  />
+                  Nur faire Teams
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={min5PassBalance}
+                    onChange={(e) => setMin5PassBalance(e.target.checked)}
+                    className="accent-emerald-500 w-4 h-4"
+                  />
+                  Min. 5 &amp; Pass-Balance
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={true6v6Only}
+                    onChange={(e) => setTrue6v6Only(e.target.checked)}
+                    className="accent-fuchsia-500 w-4 h-4"
+                  />
+                  Nur True 6v6
+                </label>
+              </>
             )}
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
-            {sourceFilter !== 'match' && (
-              <label className="flex items-center gap-2 cursor-pointer font-bold text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={fairOnly}
-                  onChange={(e) => setFairOnly(e.target.checked)}
-                  className="accent-emerald-500 w-4 h-4"
-                />
-                Nur faire Teams
-              </label>
-            )}
-
             <div className="flex items-center gap-2 font-bold text-slate-300">
               <span>Min. Bälle:</span>
               <input
