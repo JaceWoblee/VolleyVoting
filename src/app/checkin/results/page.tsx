@@ -233,12 +233,20 @@ export default function CheckInResults() {
               {allData.length} digitale Check-ins erfasst.
             </p>
           </div>
-          <button 
-            onClick={() => router.push('/checkin')} 
-            className="bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold shadow-sm transition-colors text-sm"
-          >
-            ← Zurück zum Kiosk
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => router.push('/training')}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold shadow-sm transition-colors text-sm flex items-center gap-1.5"
+            >
+              <span>🏐</span> Training Board
+            </button>
+            <button 
+              onClick={() => router.push('/checkin')} 
+              className="bg-slate-800 border border-slate-700 hover:bg-slate-700 text-white px-4 py-2 rounded-xl font-bold shadow-sm transition-colors text-sm"
+            >
+              ← Zurück zum Kiosk
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}
