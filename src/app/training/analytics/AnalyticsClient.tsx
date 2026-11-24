@@ -42,6 +42,7 @@ export interface SerializedMatch {
   date: string;
   status: string;
   opponentName: string;
+  opponentTier?: 'strong' | 'mid' | 'weak';
   sets: {
     setNumber: number;
     startingLineup: string[];
@@ -110,6 +111,7 @@ interface MatchSummary {
   id: string;
   date: string;
   opponent: string;
+  opponentTier?: 'strong' | 'mid' | 'weak';
   setsWon: number;
   setsLost: number;
   setScores: string[];
