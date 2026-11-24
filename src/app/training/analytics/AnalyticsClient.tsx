@@ -28,6 +28,7 @@ export interface SerializedGame {
     clutchScorer?: number | null;
     clutchIsError?: boolean;
     timestamp: string;
+    pointType?: 'normal' | 'ace' | 'serve_error' | 'sideout';
   }[];
   queensLeaderboard?: {
     teamName: string;
@@ -81,6 +82,10 @@ interface PlayerStats {
   subLosses: number;
   mentalBuckets: { low: BucketStat; mid: BucketStat; high: BucketStat };
   physicalBuckets: { low: BucketStat; mid: BucketStat; high: BucketStat };
+  serves: number;
+  serveWins: number;
+  aces: number;
+  serveErrors: number;
 }
 
 interface PairStats {
@@ -90,6 +95,15 @@ interface PairStats {
   wins: number;
   winRate: number;
   synergyLift: number;
+}
+
+interface TrioStats {
+  key: string;
+  players: string[];
+  rallies: number; 
+  wins: number;
+  fbso: number;
+  acesConceded: number;
 }
 
 interface MatchSummary {
@@ -124,11 +138,12 @@ export default function AnalyticsClient({
   games: SerializedGame[];
   matches: SerializedMatch[];
 }) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'synergy' | 'matches' | 'checkin' | 'clutch'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'synergy' | 'serve_receive' | 'matches' | 'checkin' | 'clutch'>('overview');
   const [sourceFilter, setSourceFilter] = useState<'both' | 'training' | 'match'>(
     matches.length > 0 && games.length === 0 ? 'match' : 'both'
   );
   const [dateFilter, setDateFilter] = useState<'all' | '30d' | '7d'>('all');
+  const [tierFilter, setTierFilter] = useState<'all' | 'strong_mid' | 'strong' | 'weak'>('all');
   const [modeFilter, setModeFilter] = useState<'all' | '6v6' | '8ball'>('all');
   const [fairOnly, setFairOnly] = useState<boolean>(true);
   const [min5PassBalance, setMin5PassBalance] = useState<boolean>(true);
@@ -150,8 +165,16 @@ export default function AnalyticsClient({
   );
 
   const filteredMatches = useMemo(
-    () => matches.filter((m) => new Date(m.date).getTime() >= cutoffMs),
-    [matches, cutoffMs]
+    () =>
+      matches.filter((m) => {
+        if (new Date(m.date).getTime() < cutoffMs) return false;
+        const tier = m.opponentTier || 'mid';
+        if (tierFilter === 'strong_mid') return tier === 'strong' || tier === 'mid';
+        if (tierFilter === 'strong') return tier === 'strong';
+        if (tierFilter === 'weak') return tier === 'weak';
+        return true;
+      }),
+    [matches, cutoffMs, tierFilter]
   );
 
   // Core Stats Engine (Unified by Player Name)
@@ -161,6 +184,13 @@ export default function AnalyticsClient({
     const numToName = new Map<number, string>();
     const matchSummaries: MatchSummary[] = [];
     const numToRole = new Map<number, string>();
+    const triosMap = new Map<string, TrioStats>();
+    let totalServesTracked = 0;
+    let totalAces = 0;
+    let totalServeErrors = 0;
+    let totalRecInPlay = 0;
+    let totalRecWins = 0;
+    let totalFbso = 0;
 
     const countRoles = (nums: number[]) => {
       const c: Record<string, number> = { Pass: 0, Neben: 0, Mitte: 0, Libera: 0, Dia: 0 };
@@ -206,6 +236,10 @@ export default function AnalyticsClient({
           subIns: 0,
           subWins: 0,
           subLosses: 0,
+          serves: 0,
+          serveWins: 0,
+          aces: 0,
+          serveErrors: 0,
           mentalBuckets: {
             low: { wins: 0, rallies: 0 },
             mid: { wins: 0, rallies: 0 },
@@ -320,6 +354,60 @@ export default function AnalyticsClient({
             if (!isTrue6v6Side(pt.teamA) || !isTrue6v6Side(pt.teamB)) return;
           }
           totalRallies++;
+
+          // Service & Reception tracking (6v6 points with servingTeam)
+          if (game.mode === '6v6' && pt.servingTeam) {
+            const ptType = pt.pointType || 'normal';
+            const servingSide = pt.servingTeam === 'A' ? pt.teamA : pt.teamB;
+            const receivingSide = pt.servingTeam === 'A' ? pt.teamB : pt.teamA;
+            const srvWon = pt.winner === pt.servingTeam;
+
+            totalServesTracked++;
+            if (ptType === 'ace') totalAces++;
+            if (ptType === 'serve_error') totalServeErrors++;
+
+            // Server stats (Pos 1 = index 0 fallback)
+            const srvNum = pt.server ?? servingSide[0] ?? null;
+            if (srvNum && srvNum > 0) {
+              const srv = ensurePlayer(resolveName(srvNum), srvNum);
+              srv.serves++;
+              if (srvWon) srv.serveWins++;
+              if (ptType === 'ace') srv.aces++;
+              if (ptType === 'serve_error') srv.serveErrors++;
+            }
+
+            // Reception stats (exclude opponent serve errors so free points don't inflate reception %)
+            if (ptType !== 'serve_error') {
+              totalRecInPlay++;
+              if (!srvWon) totalRecWins++;
+              if (ptType === 'sideout') totalFbso++;
+
+              // Identify Receive Trio (Neben + Libera on the receiving side)
+              const receivers = receivingSide
+                .filter((n) => n > 0 && ['Neben', 'Libera'].includes(numToRole.get(n) || ''))
+                .map(resolveName)
+                .sort();
+
+              if (receivers.length === 3) {
+                const key = receivers.join(' + ');
+                if (!triosMap.has(key)) {
+                  triosMap.set(key, {
+                    key,
+                    players: receivers,
+                    rallies: 0,
+                    wins: 0,
+                    fbso: 0,
+                    acesConceded: 0,
+                  });
+                }
+                const trio = triosMap.get(key)!;
+                trio.rallies++;
+                if (!srvWon) trio.wins++;
+                if (ptType === 'sideout') trio.fbso++;
+                if (ptType === 'ace') trio.acesConceded++;
+              }
+            }
+          }
 
           const processSide = (sideNums: number[], won: boolean) => {
             const realNames = sideNums.filter((n) => n > 0).map(resolveName);
@@ -479,6 +567,7 @@ export default function AnalyticsClient({
             id: match._id,
             date: match.date,
             opponent: match.opponentName,
+            opponentTier: match.opponentTier || 'mid', // <-- check this line
             setsWon,
             setsLost,
             setScores,
@@ -510,10 +599,15 @@ export default function AnalyticsClient({
       };
     });
 
+    const triosList = Array.from(triosMap.values()).sort(
+      (a, b) => (b.rallies > 0 ? b.fbso / b.rallies : 0) - (a.rallies > 0 ? a.fbso / a.rallies : 0)
+    );
+
     return {
       playersMap,
       playersList,
       pairsList,
+      triosList,
       matchSummaries,
       totalRallies,
       totalMatchSets,
@@ -521,6 +615,12 @@ export default function AnalyticsClient({
       eighthBallTotal,
       eighthBallServeWins,
       eighthBallServeTotal,
+      totalServesTracked,
+      totalAces,
+      totalServeErrors,
+      totalRecInPlay,
+      totalRecWins,
+      totalFbso,
     };
   }, [games, filteredGames, filteredMatches, sourceFilter, modeFilter, fairOnly, min5PassBalance, true6v6Only]);
 
@@ -668,6 +768,28 @@ export default function AnalyticsClient({
               ))}
             </div>
 
+            {/* OPPONENT TIER FILTER (hidden when Training-only) */}
+            {sourceFilter !== 'training' && (
+              <div className="flex bg-slate-900 p-1 rounded-xl border border-slate-700 font-bold">
+                {([
+                  ['all', 'Alle Gegner'],
+                  ['strong_mid', '🔴🟡 Stark/Mittel'],
+                  ['strong', '🔴 Stark'],
+                  ['weak', '🟢 Schwach'],
+                ] as const).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => setTierFilter(val)}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${
+                      tierFilter === val ? 'bg-amber-600 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* TRAINING MODE FILTER (hidden when Match-only) */}
             {sourceFilter !== 'match' && (
               <>
@@ -724,6 +846,7 @@ export default function AnalyticsClient({
           {([
             ['overview', '🏆 Übersicht'],
             ['synergy', '🤝 Synergie'],
+            ['serve_receive', '🎯 Service & Annahme'],
             ['matches', '🏐 Matches & Subs'],
             ['checkin', '🧠 Check-in Effekt'],
             ['clutch', '🎱 8-Ball Clutch'],
@@ -898,6 +1021,161 @@ export default function AnalyticsClient({
           </div>
         )}
 
+        {/* TAB: SERVICE & ANNAHME */}
+        {activeTab === 'serve_receive' && (
+          <div className="space-y-6">
+            {stats.totalServesTracked === 0 ? (
+              <div className="bg-slate-800/60 border border-slate-700 rounded-3xl p-8 text-center text-slate-400 text-sm">
+                Noch keine 6v6 Service-/Annahme-Daten für diesen Filter vorhanden.
+              </div>
+            ) : (
+              <>
+                {/* Top KPIs */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-4">
+                    <div className="text-[11px] font-black uppercase text-slate-400">⚡ Ace-Quote</div>
+                    <div className="text-2xl font-black text-emerald-400 mt-1">
+                      {pct(stats.totalAces, stats.totalServesTracked) ?? '–'}%
+                      <span className="text-xs text-slate-400 font-bold ml-1.5">
+                        ({stats.totalAces}/{stats.totalServesTracked})
+                      </span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-4">
+                    <div className="text-[11px] font-black uppercase text-slate-400">❌ Service-Fehler</div>
+                    <div className="text-2xl font-black text-red-400 mt-1">
+                      {pct(stats.totalServeErrors, stats.totalServesTracked) ?? '–'}%
+                      <span className="text-xs text-slate-400 font-bold ml-1.5">
+                        ({stats.totalServeErrors}/{stats.totalServesTracked})
+                      </span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-4">
+                    <div className="text-[11px] font-black uppercase text-slate-400">🔄 Sideout (In-Play)</div>
+                    <div className="text-2xl font-black text-indigo-400 mt-1">
+                      {pct(stats.totalRecWins, stats.totalRecInPlay) ?? '–'}%
+                      <span className="text-xs text-slate-400 font-bold ml-1.5">
+                        ({stats.totalRecWins}/{stats.totalRecInPlay})
+                      </span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-4">
+                    <div className="text-[11px] font-black uppercase text-slate-400">🎯 First-Ball Sideout</div>
+                    <div className="text-2xl font-black text-cyan-400 mt-1">
+                      {pct(stats.totalFbso, stats.totalRecInPlay) ?? '–'}%
+                      <span className="text-xs text-slate-400 font-bold ml-1.5">
+                        ({stats.totalFbso}/{stats.totalRecInPlay})
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Server Table */}
+                <div className="bg-slate-800/60 border border-slate-700 rounded-3xl overflow-hidden">
+                  <div className="p-4 border-b border-slate-700">
+                    <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">
+                      🏐 Service-Statistik (automatisch über Pos 1)
+                    </h2>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-900/70 text-xs uppercase text-slate-400 border-b border-slate-700">
+                        <tr>
+                          <th className="p-4">Spielerin</th>
+                          <th className="p-4 text-right">Services</th>
+                          <th className="p-4 text-right">⚡ Aces</th>
+                          <th className="p-4 text-right">❌ Fehler</th>
+                          <th className="p-4 text-right">Netto</th>
+                          <th className="p-4 text-right">Break-Win %</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/60">
+                        {stats.playersList
+                          .filter((p) => p.serves > 0)
+                          .sort((a, b) => (b.aces - b.serveErrors) - (a.aces - a.serveErrors) || b.serves - a.serves)
+                          .map((p) => {
+                            const net = p.aces - p.serveErrors;
+                            return (
+                              <tr key={p.name} className="hover:bg-slate-800/80">
+                                <td className="p-4 font-black">
+                                  {p.number ? `#${p.number} ` : ''}{p.name}
+                                </td>
+                                <td className="p-4 text-right font-bold">{p.serves}</td>
+                                <td className="p-4 text-right font-bold text-emerald-400">
+                                  {p.aces} ({pct(p.aces, p.serves)}%)
+                                </td>
+                                <td className="p-4 text-right font-bold text-red-400">
+                                  {p.serveErrors} ({pct(p.serveErrors, p.serves)}%)
+                                </td>
+                                <td
+                                  className={`p-4 text-right font-black ${
+                                    net > 0 ? 'text-emerald-400' : net < 0 ? 'text-red-400' : 'text-slate-400'
+                                  }`}
+                                >
+                                  {net > 0 ? `+${net}` : net}
+                                </td>
+                                <td className="p-4 text-right font-black">
+                                  {pct(p.serveWins, p.serves)}%
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Reception Trios Table */}
+                <div className="bg-slate-800/60 border border-slate-700 rounded-3xl overflow-hidden">
+                  <div className="p-4 border-b border-slate-700">
+                    <h2 className="text-xs font-black uppercase tracking-widest text-slate-400">
+                      🛡️ Annahme-Trios (2× Neben + Libera · ohne gegn. Service-Fehler)
+                    </h2>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-900/70 text-xs uppercase text-slate-400 border-b border-slate-700">
+                        <tr>
+                          <th className="p-4">Annahme-Trio</th>
+                          <th className="p-4 text-right">Bälle</th>
+                          <th className="p-4 text-right">🎯 First-Ball SO</th>
+                          <th className="p-4 text-right">🔄 Sideout %</th>
+                          <th className="p-4 text-right">⚡ Gegn. Ace %</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-700/60">
+                        {stats.triosList.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="p-4 text-center text-slate-500 italic">
+                              Noch keine kompletten Annahme-Trios (2 Neben + Libera) erfasst.
+                            </td>
+                          </tr>
+                        ) : (
+                          stats.triosList.map((t) => (
+                            <tr key={t.key} className="hover:bg-slate-800/80">
+                              <td className="p-4 font-black text-white">{t.key}</td>
+                              <td className="p-4 text-right font-bold">{t.rallies}</td>
+                              <td className="p-4 text-right font-black text-cyan-400">
+                                {pct(t.fbso, t.rallies)}% ({t.fbso})
+                              </td>
+                              <td className="p-4 text-right font-bold text-indigo-300">
+                                {pct(t.wins, t.rallies)}%
+                              </td>
+                              <td className="p-4 text-right font-bold text-red-400">
+                                {pct(t.acesConceded, t.rallies)}% ({t.acesConceded})
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* TAB 3: MATCHES & SUBS */}
         {activeTab === 'matches' && (
           <div className="space-y-6">
@@ -921,6 +1199,17 @@ export default function AnalyticsClient({
                         >
                           <div>
                             <span className="font-black text-white">vs. {m.opponent}</span>
+                            <span
+                              className={`ml-2 px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                m.opponentTier === 'strong'
+                                  ? 'bg-red-500/20 text-red-300'
+                                  : m.opponentTier === 'weak'
+                                  ? 'bg-emerald-500/20 text-emerald-300'
+                                  : 'bg-amber-500/20 text-amber-300'
+                              }`}
+                            >
+                              {m.opponentTier === 'strong' ? 'Stark' : m.opponentTier === 'weak' ? 'Schwach' : 'Mittel'}
+                            </span>
                             <span className="ml-2 text-xs text-slate-400">{m.date.slice(0, 10)}</span>
                           </div>
                           <div className="flex items-center gap-3">

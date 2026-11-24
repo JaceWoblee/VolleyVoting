@@ -8,6 +8,7 @@ export interface ITrainingPoint {
   teamB: number[];
   servingTeam?: 'A' | 'B' | null; // null = coach free ball (Balls 2–7 in 8-Ball)
   server?: number | null;         // shirtNumber of server
+  pointType?: 'normal' | 'ace' | 'serve_error' | 'sideout';
   isEighthBall?: boolean;
   clutchScorer?: number | null;
   clutchIsError?: boolean;
@@ -66,6 +67,7 @@ const TrainingGameSchema = new Schema<ITrainingGame>(
         clutchScorer: { type: Number, default: null },
         clutchIsError: { type: Boolean, default: false },
         timestamp: { type: Date, default: Date.now },
+        pointType: { type: String, enum: ['normal', 'ace', 'serve_error', 'sideout'], default: 'normal' },
       },
     ],
     queensLeaderboard: [

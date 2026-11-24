@@ -58,6 +58,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
   const [libero, setLibero] = useState<string | null>(null);
   const [activeBox, setActiveBox] = useState<number | 'libero' | null>(null);
   const [opponentName, setOpponentName] = useState<string>('');
+  const [opponentTier, setOpponentTier] = useState<'strong' | 'mid' | 'weak'>('mid');
   const [currentSetNumber, setCurrentSetNumber] = useState<number>(1);
   const [matchSets, setMatchSets] = useState<SetData[]>([]);
   const [matchStarted, setMatchStarted] = useState<boolean>(false);
@@ -81,6 +82,7 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
           setCurrentSetNumber(data.liveMatch.currentSetNumber || 1);
           setMatchSets(data.liveMatch.sets || []);
           setOpponentName(data.liveMatch.opponentName || '');
+          setOpponentTier(data.liveMatch.opponentTier || 'mid');
           if (data.liveMatch.currentSetNumber > 1 || (data.liveMatch.court && data.liveMatch.court.some(Boolean))) {
             setMatchStarted(true); 
           }
@@ -92,7 +94,14 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
     fetchLiveMatch();
   }, []);
 
-  const autoSaveDraft = async (updatedCourt: any, updatedLibero: any, updatedSets: any, updatedSetNum: number, updatedOpponent?: string) => {
+  const autoSaveDraft = async (
+    updatedCourt: any,
+    updatedLibero: any,
+    updatedSets: any,
+    updatedSetNum: number,
+    updatedOpponent?: string,
+    updatedTier?: 'strong' | 'mid' | 'weak'
+  ) => {
     try {
       await fetch('/api/match', {
         method: 'PUT',
@@ -102,7 +111,8 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
           libero: updatedLibero,
           sets: updatedSets,
           currentSetNumber: updatedSetNum,
-          opponentName: updatedOpponent !== undefined ? updatedOpponent : opponentName
+          opponentName: updatedOpponent !== undefined ? updatedOpponent : opponentName,
+          opponentTier: updatedTier !== undefined ? updatedTier : opponentTier,
         })
       });
     } catch (e) {
@@ -564,6 +574,32 @@ export default function MatchBoardClient({ initialPlayers }: { initialPlayers: P
               ) : (
                 <span className="text-sm font-bold text-amber-400 uppercase tracking-widest">{opponentName || 'Unbekannt'}</span>
               )}
+            </div>
+
+            <div className="flex items-center gap-1.5 mt-2">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-1">Stärke:</span>
+              {([
+                ['strong', '🔴 Stark', 'bg-red-600 text-white border-red-400'],
+                ['mid', '🟡 Mittel', 'bg-amber-500 text-slate-950 border-amber-300'],
+                ['weak', '🟢 Schwach', 'bg-emerald-600 text-white border-emerald-400'],
+              ] as const).map(([val, label, activeCls]) => (
+                <button
+                  key={val}
+                  type="button"
+                  disabled={isMatchOver}
+                  onClick={() => {
+                    setOpponentTier(val);
+                    autoSaveDraft(court, libero, matchSets, currentSetNumber, opponentName, val);
+                  }}
+                  className={`px-2 py-0.5 rounded-lg text-[11px] font-black border transition-all disabled:opacity-40 ${
+                    opponentTier === val
+                      ? activeCls
+                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-white'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
 
             {!isMatchOver && matchStarted && (

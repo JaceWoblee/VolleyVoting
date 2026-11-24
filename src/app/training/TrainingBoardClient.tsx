@@ -17,6 +17,8 @@ const getRoleColors = (role: string) => {
   }
 };
 
+type PointType = 'normal' | 'ace' | 'serve_error' | 'sideout';
+
 interface Player {
   name: string;
   number: number; // Negative numbers (-1, -2, ...) = Guest Dummies
@@ -29,10 +31,11 @@ interface PointLog {
   winner: 'A' | 'B';
   scoreA: number;
   scoreB: number;
-  teamA: number[];
+  teamA: number[]; // Ordered [P1, P2, P3, P4, P5, P6]
   teamB: number[];
   servingTeam?: 'A' | 'B' | null;
   server?: number | null;
+  pointType?: PointType;
   isEighthBall?: boolean;
   clutchScorer?: number | null;
   clutchIsError?: boolean;
@@ -44,23 +47,25 @@ type SlotTarget =
   | { zone: 'B'; index: number }
   | { zone: 'bench'; playerNumber: number };
 
+// Visual 2x3 court layout mapped to [P1=0, P2=1, P3=2, P4=3, P5=4, P6=5]
 const COURT_POSITIONS = [
-  { label: 'Pos 4', idx: 0 }, { label: 'Pos 3', idx: 1 }, { label: 'Pos 2', idx: 2 },
-  { label: 'Pos 5', idx: 3 }, { label: 'Pos 6', idx: 4 }, { label: 'Pos 1', idx: 5 },
+  { label: 'Pos 4', idx: 3 }, { label: 'Pos 3', idx: 2 }, { label: 'Pos 2', idx: 1 },
+  { label: 'Pos 5', idx: 4 }, { label: 'Pos 6', idx: 5 }, { label: 'Pos 1', idx: 0 },
 ];
 
+// 5-1 Opposite Schema: P1=Pass, P2=Neben, P3=Mitte, P4=Dia, P5=Neben, P6=Libera/Mitte
 const ROLE_SLOT_PREFERENCE: Record<string, number[]> = {
-  Mitte: [1, 0, 2, 4, 3, 5],
-  Libera: [4, 3, 5, 1, 0, 2],
-  Pass: [2, 5, 0, 3, 1, 4],
-  Dia: [5, 2, 0, 3, 1, 4],
-  Neben: [0, 3, 2, 5, 1, 4],
+  Pass: [0, 3, 1, 4, 2, 5],
+  Dia: [3, 0, 1, 4, 2, 5],
+  Neben: [1, 4, 3, 0, 2, 5],
+  Mitte: [2, 5, 1, 4, 3, 0],
+  Libera: [5, 2, 4, 1, 0, 3],
   Unassigned: [0, 1, 2, 3, 4, 5],
 };
 
 function placePlayersByRole(players: Player[]): (number | null)[] {
   const court: (number | null)[] = [null, null, null, null, null, null];
-  const order = ['Mitte', 'Libera', 'Pass', 'Dia', 'Neben', 'Unassigned'];
+  const order = ['Pass', 'Dia', 'Neben', 'Mitte', 'Libera', 'Unassigned'];
 
   const sorted = [...players].sort(
     (a, b) =>
@@ -79,6 +84,16 @@ function placePlayersByRole(players: Player[]): (number | null)[] {
   return court;
 }
 
+// Clockwise rotation: P2->P1, P3->P2, P4->P3, P5->P4, P6->P5, P1->P6
+const rotateForward = (slots: (number | null)[]) => [
+  slots[1], slots[2], slots[3], slots[4], slots[5], slots[0],
+];
+
+// Counter-clockwise rotation: P6->P1, P1->P2, P2->P3, P3->P4, P4->P5, P5->P6
+const rotateBackward = (slots: (number | null)[]) => [
+  slots[5], slots[0], slots[1], slots[2], slots[3], slots[4],
+];
+
 export default function TrainingBoardClient({
   checkedInPlayers,
   allPlayers,
@@ -95,7 +110,7 @@ export default function TrainingBoardClient({
     return [...base, ...guests];
   }, [useFullRoster, allPlayers, checkedInPlayers, guests]);
 
-    const [gameMode, setGameMode] = useState<'6v6' | 'queens' | '8ball'>('6v6');
+  const [gameMode, setGameMode] = useState<'6v6' | 'queens' | '8ball'>('6v6');
 
   const [teamA, setTeamA] = useState<(number | null)[]>([null, null, null, null, null, null]);
   const [teamB, setTeamB] = useState<(number | null)[]>([null, null, null, null, null, null]);
@@ -112,7 +127,15 @@ export default function TrainingBoardClient({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [savedBanner, setSavedBanner] = useState<boolean>(false);
   const [scoreHistory, setScoreHistory] = useState<
-    { scoreA: number; scoreB: number; roundA: number; roundB: number; servingTeam: 'A' | 'B' }[]
+    {
+      scoreA: number;
+      scoreB: number;
+      roundA: number;
+      roundB: number;
+      servingTeam: 'A' | 'B';
+      teamA: (number | null)[];
+      teamB: (number | null)[];
+    }[]
   >([]);
 
   const getPlayer = (num: number | null) =>
@@ -164,6 +187,19 @@ export default function TrainingBoardClient({
       nextB[selectedSlot.index] = null;
       setTeamB(nextB);
     }
+    setSelectedSlot(null);
+  };
+
+  // MANUAL 5-1 SORT FOR A SINGLE TEAM
+  const autoSortTeam = (side: 'A' | 'B') => {
+    const slots = side === 'A' ? teamA : teamB;
+    const players = slots
+      .filter((n): n is number => n !== null)
+      .map((n) => getPlayer(n))
+      .filter((p): p is Player => p !== null);
+    const sorted = placePlayersByRole(players);
+    if (side === 'A') setTeamA(sorted);
+    else setTeamB(sorted);
     setSelectedSlot(null);
   };
 
@@ -264,7 +300,7 @@ export default function TrainingBoardClient({
     setSelectedSlot(null);
   };
 
-  // 2-TAP SWAP LOGIC
+  // 2-TAP SWAP LOGIC (works within same team, across teams, and with bench)
   const getSlotValue = (slot: SlotTarget): number | null => {
     if (slot.zone === 'A') return teamA[slot.index];
     if (slot.zone === 'B') return teamB[slot.index];
@@ -320,9 +356,10 @@ export default function TrainingBoardClient({
     setSelectedSlot(null);
   };
 
-  // SCORE & LOGGING (supports both 6v6 Standard and 8-Ball)
+  // SCORE, AUTO-ROTATION & LOGGING
   const addPoint = (
     winner: 'A' | 'B',
+    pointType: PointType = 'normal',
     clutchScorer: number | null = null,
     clutchIsError = false
   ) => {
@@ -334,16 +371,28 @@ export default function TrainingBoardClient({
       return;
     }
 
-    setScoreHistory((prev) => [...prev, { scoreA, scoreB, roundA, roundB, servingTeam }]);
+    setScoreHistory((prev) => [
+      ...prev,
+      { scoreA, scoreB, roundA, roundB, servingTeam, teamA: [...teamA], teamB: [...teamB] },
+    ]);
 
     let newScoreA = scoreA;
     let newScoreB = scoreB;
     const isEightBall = gameMode === '8ball';
     const ballsPlayed = roundA + roundB;
     const isDecider = isEightBall && ballsPlayed === 7;
-    const isServeBall = isDecider;
+    const isServeBall = isEightBall ? isDecider : true;
 
-    const resolvedServer = isServeBall ? serverNum : null;
+    // In 6v6, Pos 1 (index 0) of the serving team is automatically the server
+    const resolvedServer = isEightBall
+      ? isDecider
+        ? serverNum
+        : null
+      : servingTeam === 'A'
+      ? teamA[0]
+      : teamB[0];
+
+    const loggedServingTeam = isServeBall ? servingTeam : null;
 
     if (isEightBall) {
       if (ballsPlayed < 7) {
@@ -366,6 +415,13 @@ export default function TrainingBoardClient({
       newScoreB = winner === 'B' ? scoreB + 1 : scoreB;
       setScoreA(newScoreA);
       setScoreB(newScoreB);
+
+      // Auto-rotate receiving team forward when they win the rally
+      if (winner !== servingTeam) {
+        setServingTeam(winner);
+        if (winner === 'A') setTeamA((prev) => rotateForward(prev));
+        else setTeamB((prev) => rotateForward(prev));
+      }
     }
 
     setPointsLog((prev) => [
@@ -376,8 +432,9 @@ export default function TrainingBoardClient({
         scoreB: newScoreB,
         teamA: activeA,
         teamB: activeB,
-        servingTeam: isServeBall ? servingTeam : null,
+        servingTeam: loggedServingTeam,
         server: resolvedServer,
+        pointType: isEightBall ? 'normal' : pointType,
         isEighthBall: isDecider,
         clutchScorer: isDecider ? clutchScorer : null,
         clutchIsError: isDecider ? clutchIsError : false,
@@ -398,6 +455,8 @@ export default function TrainingBoardClient({
       setRoundA(prev.roundA);
       setRoundB(prev.roundB);
       setServingTeam(prev.servingTeam);
+      setTeamA(prev.teamA);
+      setTeamB(prev.teamB);
       setScoreHistory((h) => h.slice(0, -1));
     }
   };
@@ -452,17 +511,49 @@ export default function TrainingBoardClient({
 
   const renderCourtSide = (side: 'A' | 'B', slots: (number | null)[]) => {
     const isA = side === 'A';
+    const isServing = gameMode === '6v6' && servingTeam === side;
     const accent = isA ? 'text-indigo-400 border-indigo-500/40' : 'text-amber-400 border-amber-500/40';
 
     return (
       <div className={`flex-1 bg-slate-800/60 border-2 rounded-3xl p-4 sm:p-5 flex flex-col items-center ${accent}`}>
-        <div className="w-full flex justify-between items-center mb-3">
-          <h2 className="text-lg font-black uppercase tracking-widest">
-            {isA ? '🔵 Team A' : '🟠 Team B'}
-          </h2>
-          <span className="text-xs font-bold text-slate-400">
-            {slots.filter(Boolean).length} / 6 Feld
-          </span>
+        <div className="w-full flex flex-wrap justify-between items-center gap-2 mb-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-black uppercase tracking-widest">
+              {isA ? '🔵 Team A' : '🟠 Team B'}
+            </h2>
+            {isServing && (
+              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                🏐 Service
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => (isA ? setTeamA(rotateBackward) : setTeamB(rotateBackward))}
+              title="Rotation zurück"
+              className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-300"
+            >
+              ↺
+            </button>
+            <button
+              onClick={() => autoSortTeam(side)}
+              title="Nach 5-1 Schema sortieren"
+              className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-700 border border-slate-700 text-[11px] font-bold text-slate-300"
+            >
+              ⚡ 5-1
+            </button>
+            <button
+              onClick={() => (isA ? setTeamA(rotateForward) : setTeamB(rotateForward))}
+              title="Rotation vorwärts"
+              className="px-2 py-1 rounded-lg bg-slate-900 hover:bg-slate-700 border border-slate-700 text-xs font-bold text-slate-300"
+            >
+              ↻
+            </button>
+            <span className="text-xs font-bold text-slate-400 ml-1">
+              {slots.filter(Boolean).length}/6
+            </span>
+          </div>
         </div>
 
         <div className="w-full h-3 bg-slate-200 rounded-t-md border-b-2 border-slate-400 mb-2 flex items-center justify-center">
@@ -474,6 +565,7 @@ export default function TrainingBoardClient({
             const slotTarget: SlotTarget = { zone: side, index: pos.idx };
             const player = getPlayer(slots[pos.idx]);
             const selected = isSameSlot(selectedSlot, slotTarget);
+            const isServerSlot = isServing && pos.idx === 0;
 
             return (
               <button
@@ -484,12 +576,14 @@ export default function TrainingBoardClient({
                     ? 'ring-2 ring-white scale-105 z-10 shadow-xl ' +
                       (player ? getRoleColors(player.role) : 'bg-indigo-500/30 border-white text-white')
                     : player
-                    ? getRoleColors(player.role) + ' hover:scale-[1.03]'
+                    ? getRoleColors(player.role) +
+                      (isServerSlot ? ' ring-2 ring-emerald-400' : '') +
+                      ' hover:scale-[1.03]'
                     : 'bg-slate-900/60 border-dashed border-slate-700 text-slate-600 hover:border-slate-500'
                 }`}
               >
-                <span className="absolute top-1 left-2 text-[9px] font-bold uppercase opacity-50">
-                  {pos.label}
+                <span className="absolute top-1 left-2 text-[9px] font-bold uppercase opacity-60">
+                  {pos.label} {isServerSlot ? '🏐' : ''}
                 </span>
                 {player ? (
                   <>
@@ -606,7 +700,9 @@ export default function TrainingBoardClient({
                 .filter((p): p is Player => p !== null);
 
               const hasTeams = activePlayersA.length > 0 && activePlayersB.length > 0;
-              const currentServer = getPlayer(serverNum);
+              const currentServer = isEightBall
+                ? getPlayer(serverNum)
+                : getPlayer(servingTeam === 'A' ? teamA[0] : teamB[0]);
 
               const pickServer = (team: 'A' | 'B', num: number) => {
                 setServingTeam(team);
@@ -615,13 +711,64 @@ export default function TrainingBoardClient({
 
               const handleClutchTap = (playerTeam: 'A' | 'B', playerNum: number) => {
                 const isError = clutchMode === 'error';
-                // If player made an error, the OTHER team wins the 8th ball
                 const winner: 'A' | 'B' = isError
                   ? playerTeam === 'A'
                     ? 'B'
                     : 'A'
                   : playerTeam;
-                addPoint(winner, playerNum, isError);
+                addPoint(winner, 'normal', playerNum, isError);
+              };
+
+              const render6v6TeamButtons = (side: 'A' | 'B') => {
+                const isA = side === 'A';
+                const isServing = servingTeam === side;
+                const mainBg = isA
+                  ? 'bg-indigo-600 hover:bg-indigo-500'
+                  : 'bg-amber-600 hover:bg-amber-500';
+
+                if (isServing) {
+                  return (
+                    <div className="w-full sm:flex-1 flex flex-col gap-3">
+                      <button
+                        onClick={() => addPoint(side, 'normal')}
+                        className={`w-full py-6 ${mainBg} active:scale-95 rounded-2xl font-black text-2xl shadow-lg transition-all`}
+                      >
+                        +1 Team {side}
+                      </button>
+                      <button
+                        onClick={() => addPoint(side, 'ace')}
+                        className="w-full py-4 bg-emerald-600/90 hover:bg-emerald-500 active:scale-95 rounded-2xl font-black text-base uppercase tracking-wider shadow transition-all"
+                      >
+                        ⚡ Ace (Team {side})
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="w-full sm:flex-1 flex flex-col gap-3">
+                    <button
+                      onClick={() => addPoint(side, 'normal')}
+                      className={`w-full py-6 ${mainBg} active:scale-95 rounded-2xl font-black text-2xl shadow-lg transition-all`}
+                    >
+                      +1 Team {side}
+                    </button>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => addPoint(side, 'sideout')}
+                        className="py-4 bg-cyan-600/90 hover:bg-cyan-500 active:scale-95 rounded-2xl font-black text-base shadow transition-all"
+                      >
+                        🎯 Sideout
+                      </button>
+                      <button
+                        onClick={() => addPoint(side, 'serve_error')}
+                        className="py-4 bg-red-600/80 hover:bg-red-500 active:scale-95 rounded-2xl font-black text-base shadow transition-all"
+                      >
+                        ❌ Serve-Fehler
+                      </button>
+                    </div>
+                  </div>
+                );
               };
 
               return (
@@ -654,12 +801,24 @@ export default function TrainingBoardClient({
                         </span>
                       </div>
                     ) : (
-                      <span className="text-xs font-black uppercase tracking-widest text-slate-400">
-                        6v6 Standard
-                      </span>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-xs font-black uppercase tracking-widest text-slate-400">
+                          6v6 Standard
+                        </span>
+                        <button
+                          onClick={() => setServingTeam((prev) => (prev === 'A' ? 'B' : 'A'))}
+                          className="text-xs font-bold bg-slate-900 hover:bg-slate-700 border border-slate-600 px-3 py-1 rounded-full transition-all"
+                        >
+                          🏐 Service: {servingTeam === 'A' ? '🔵 Team A' : '🟠 Team B'}
+                          {currentServer
+                            ? ` (${currentServer.number < 0 ? currentServer.name : `#${currentServer.number} ${currentServer.name}`})`
+                            : ''}
+                          <span className="ml-2 text-slate-400">⇄</span>
+                        </button>
+                      </div>
                     )}
 
-                    {/* Active Server Badge (tap to change) */}
+                    {/* Active Server Badge (8-Ball) */}
                     {isServeBall && currentServer && (
                       <button
                         onClick={() => setServerNum(null)}
@@ -676,7 +835,7 @@ export default function TrainingBoardClient({
                     )}
                   </div>
 
-                  {/* LAYER 1: SERVER PICKER (Ball 1 & Ball 8 in 8-Ball) */}
+                  {/* LAYER 1: SERVER PICKER (Ball 8 in 8-Ball) */}
                   {needsServerPick && hasTeams ? (
                     <div className="space-y-4">
                       <p className="text-center text-xs font-black uppercase tracking-widest text-emerald-300">
@@ -771,7 +930,6 @@ export default function TrainingBoardClient({
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Team A Players */}
                         <div className="bg-indigo-950/40 border border-indigo-500/40 rounded-2xl p-3 space-y-2">
                           <div className="text-xs font-black text-indigo-300">
                             {clutchMode === 'point'
@@ -795,7 +953,6 @@ export default function TrainingBoardClient({
                           </div>
                         </div>
 
-                        {/* Team B Players */}
                         <div className="bg-amber-950/30 border border-amber-500/40 rounded-2xl p-3 space-y-2">
                           <div className="text-xs font-black text-amber-300">
                             {clutchMode === 'point'
@@ -836,14 +993,18 @@ export default function TrainingBoardClient({
                       </div>
                     </div>
                   ) : (
-                    /* STANDARD SCOREBOARD (6v6 & 8-Ball Balls 1–7) */
+                    /* STANDARD SCOREBOARD (6v6 with Ace/Sideout/Serve Error & 8-Ball Balls 1–7) */
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                      <button
-                        onClick={() => addPoint('A')}
-                        className="w-full sm:w-52 py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-95 rounded-2xl font-black text-xl shadow-lg transition-all"
-                      >
-                        +1 Team A
-                      </button>
+                      {isEightBall ? (
+                        <button
+                          onClick={() => addPoint('A')}
+                          className="w-full sm:w-52 py-4 bg-indigo-600 hover:bg-indigo-500 active:scale-95 rounded-2xl font-black text-xl shadow-lg transition-all"
+                        >
+                          +1 Team A
+                        </button>
+                      ) : (
+                        render6v6TeamButtons('A')
+                      )}
 
                       <div className="flex flex-col items-center">
                         {isEightBall && (
@@ -874,34 +1035,21 @@ export default function TrainingBoardClient({
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => addPoint('B')}
-                        className="w-full sm:w-52 py-4 bg-amber-600 hover:bg-amber-500 active:scale-95 rounded-2xl font-black text-xl shadow-lg transition-all"
-                      >
-                        +1 Team B
-                      </button>
+                      {isEightBall ? (
+                        <button
+                          onClick={() => addPoint('B')}
+                          className="w-full sm:w-52 py-4 bg-amber-600 hover:bg-amber-500 active:scale-95 rounded-2xl font-black text-xl shadow-lg transition-all"
+                        >
+                          +1 Team B
+                        </button>
+                      ) : (
+                        render6v6TeamButtons('B')
+                      )}
                     </div>
                   )}
                 </div>
               );
             })()}
-
-            {/* Hint & Send-to-Bench Action */}
-            {selectedSlot && (
-              <div className="bg-indigo-500/20 border border-indigo-400/40 text-indigo-200 text-xs font-bold px-4 py-2.5 rounded-xl flex flex-wrap items-center justify-between gap-3">
-                <span>
-                  Tausch-Modus aktiv — Tippe eine andere Position an zum Tauschen (nochmal tippen zum Abbrechen).
-                </span>
-                {isCourtPlayerSelected && (
-                  <button
-                    onClick={sendSelectedToBench}
-                    className="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-lg font-black shadow-sm transition-all"
-                  >
-                    ⬇️ Auf Bank setzen
-                  </button>
-                )}
-              </div>
-            )}
 
             {/* Dual Courts */}
             <div className="flex flex-col lg:flex-row gap-6">
@@ -959,51 +1107,67 @@ export default function TrainingBoardClient({
                 <p className="text-xs text-slate-500 italic">Alle Spielerinnen sind auf dem Feld.</p>
               ) : (
                 <div className="flex flex-wrap gap-2.5" onClick={(e) => e.stopPropagation()}>
-                  {benchPlayers.map((player) => {
-                    const slot: SlotTarget = { zone: 'bench', playerNumber: player.number };
-                    const selected = isSameSlot(selectedSlot, slot);
-                    const isGuest = player.number < 0;
+                {/* Dedicated Drop-Zone Tile for Sending Court Players to Bench */}
+                <button
+                  onClick={() => {
+                    if (isCourtPlayerSelected) sendSelectedToBench();
+                  }}
+                  disabled={!isCourtPlayerSelected}
+                  className={`px-4 py-2 rounded-xl border-2 border-dashed flex items-center gap-2 text-xs font-black transition-all ${
+                    isCourtPlayerSelected
+                      ? 'border-red-400 bg-red-500/20 text-red-200 hover:bg-red-500/30 scale-105 cursor-pointer shadow-lg'
+                      : 'border-slate-700 bg-slate-900/40 text-slate-500 cursor-default'
+                  }`}
+                >
+                  <span>⬇️</span>
+                  <span>{isCourtPlayerSelected ? 'Hier ablegen (Auswechseln)' : 'Bank-Ablage'}</span>
+                </button>
 
-                    return (
-                      <div
-                        key={player.number}
-                        className={`rounded-xl border-2 flex items-center transition-all ${
-                          selected
-                            ? 'ring-2 ring-white scale-105 ' + getRoleColors(player.role)
-                            : getRoleColors(player.role) + ' hover:scale-[1.03]'
-                        }`}
+                {benchPlayers.map((player) => {
+                  const slot: SlotTarget = { zone: 'bench', playerNumber: player.number };
+                  const selected = isSameSlot(selectedSlot, slot);
+                  const isGuest = player.number < 0;
+
+                  return (
+                    <div
+                      key={player.number}
+                      className={`rounded-xl border-2 flex items-center transition-all ${
+                        selected
+                          ? 'ring-2 ring-white scale-105 ' + getRoleColors(player.role)
+                          : getRoleColors(player.role) + ' hover:scale-[1.03]'
+                      }`}
+                    >
+                      <button
+                        onClick={() => handleSlotClick(slot)}
+                        className="px-3 py-2 flex items-center gap-2.5 text-left"
                       >
-                        <button
-                          onClick={() => handleSlotClick(slot)}
-                          className="px-3 py-2 flex items-center gap-2.5 text-left"
-                        >
-                          <span className="font-black text-base">
-                            {isGuest ? '👤' : `#${player.number}`}
-                          </span>
-                          <div>
-                            <div className="text-xs font-bold leading-tight">{player.name}</div>
-                            <div className="text-[10px] opacity-70">{player.role}</div>
+                        <span className="font-black text-base">
+                          {isGuest ? '👤' : `#${player.number}`}
+                        </span>
+                        <div>
+                          <div className="text-xs font-bold leading-tight">{player.name}</div>
+                          <div className="text-[10px] opacity-70">{player.role}</div>
+                        </div>
+                        {!isGuest && (
+                          <div className="flex gap-1 ml-1">
+                            <span className="text-[10px] bg-slate-900/70 px-1.5 py-0.5 rounded">🧠 {player.mental}</span>
+                            <span className="text-[10px] bg-slate-900/70 px-1.5 py-0.5 rounded">🔋 {player.physical}</span>
                           </div>
-                          {!isGuest && (
-                            <div className="flex gap-1 ml-1">
-                              <span className="text-[10px] bg-slate-900/70 px-1.5 py-0.5 rounded">🧠 {player.mental}</span>
-                              <span className="text-[10px] bg-slate-900/70 px-1.5 py-0.5 rounded">🔋 {player.physical}</span>
-                            </div>
-                          )}
-                        </button>
-                        {isGuest && (
-                          <button
-                            onClick={() => removeGuest(player.number)}
-                            title="Gast entfernen"
-                            className="pr-2.5 pl-1 py-2 text-xs opacity-60 hover:opacity-100 hover:text-red-400 font-black"
-                          >
-                            ✕
-                          </button>
                         )}
-                      </div>
-                    );
-                  })}
-                </div>
+                      </button>
+                      {isGuest && (
+                        <button
+                          onClick={() => removeGuest(player.number)}
+                          title="Gast entfernen"
+                          className="pr-2.5 pl-1 py-2 text-xs opacity-60 hover:opacity-100 hover:text-red-400 font-black"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
               )}
             </div>
           </>

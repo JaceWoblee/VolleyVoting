@@ -37,6 +37,7 @@ export default async function TrainingAnalyticsPage() {
       clutchScorer: p.clutchScorer ?? null,
       clutchIsError: Boolean(p.clutchIsError),
       timestamp: p.timestamp ? new Date(p.timestamp).toISOString() : '',
+      pointType: p.pointType || 'normal',
     })),
     queensLeaderboard: (g.queensLeaderboard || []).map((q: any) => ({
       teamName: q.teamName,
@@ -50,6 +51,7 @@ export default async function TrainingAnalyticsPage() {
     date: m.createdAt ? new Date(m.createdAt).toISOString() : new Date().toISOString(),
     status: m.status || 'finished',
     opponentName: m.opponentName || 'Unbekannt',
+    opponentTier: m.opponentTier || 'mid', // <-- check this line
     sets: Array.isArray(m.sets)
       ? m.sets.map((s: any) => ({
           setNumber: s.setNumber ?? 0,

@@ -6,7 +6,8 @@ const matchSchema = new Schema({
   court: [{ type: String }],
   libero: { type: String },
   opponentName: { type: String, default: 'Unbekannt' },
-  sets: { type: Schema.Types.Mixed, default: [] } 
+  sets: { type: Schema.Types.Mixed, default: [] },
+  opponentTier: { type: String, enum: ['strong', 'mid', 'weak'], default: 'mid' }
 }, { timestamps: true });
 
 const Match = models.Match || mongoose.model('Match', matchSchema);
