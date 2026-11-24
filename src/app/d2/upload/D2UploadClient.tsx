@@ -77,7 +77,7 @@ export default function D2UploadClient({
     <div className="min-h-screen bg-slate-900 text-white p-4 sm:p-8 font-sans">
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-wrap justify-between items-center gap-4 border-b border-slate-800 pb-4">
+        {/*<div className="flex flex-wrap justify-between items-center gap-4 border-b border-slate-800 pb-4">
           <div>
             <h1 className="text-2xl font-black tracking-wide">📂 D2 .dvw Upload</h1>
             <p className="text-xs text-slate-400 mt-1">
@@ -91,6 +91,7 @@ export default function D2UploadClient({
             📊 Zu den Stats →
           </Link>
         </div>
+        */}
 
         {/* Upload Dropzone */}
         <label className="block cursor-pointer bg-slate-800/60 hover:bg-slate-800 border-2 border-dashed border-emerald-500/50 hover:border-emerald-400 rounded-3xl p-10 text-center transition-all">
