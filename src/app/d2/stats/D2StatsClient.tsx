@@ -15,6 +15,45 @@ export interface SerializedD2Match {
   rotations: D2RotationStat[];
 }
 
+type RoleName = 'Neben' | 'Dia' | 'Mitte' | 'Pass' | 'Libera' | 'Sonstige';
+type SortKey = 'role' | 'pts' | 'net' | 'serve' | 'recPos' | 'attEff' | 'block';
+
+const ROLE_ORDER: RoleName[] = ['Neben', 'Dia', 'Mitte', 'Pass', 'Libera', 'Sonstige'];
+
+const FIRST_NAME_TO_ROLE: Record<string, RoleName> = {
+  nicole: 'Neben',
+  ainoa: 'Neben',
+  melina: 'Neben',
+  anina: 'Neben',
+  emily: 'Dia',
+  noemie: 'Dia',
+  isadora: 'Mitte',
+  sina: 'Mitte',
+  jael: 'Mitte',
+  alina: 'Pass',
+  berna: 'Pass',
+  eda: 'Libera',
+  gina: 'Libera',
+};
+
+const getPlayerRole = (name: string, isLibero: boolean): RoleName => {
+  const first = name.trim().split(/\s+/)[0]?.toLowerCase() || '';
+  if (FIRST_NAME_TO_ROLE[first]) return FIRST_NAME_TO_ROLE[first];
+  if (isLibero) return 'Libera';
+  return 'Sonstige';
+};
+
+const getRoleBadgeStyle = (role: RoleName) => {
+  switch (role) {
+    case 'Neben': return 'bg-red-500/20 text-red-300 border-red-500/30';
+    case 'Dia': return 'bg-violet-500/20 text-violet-300 border-violet-500/30';
+    case 'Mitte': return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+    case 'Pass': return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
+    case 'Libera': return 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30';
+    default: return 'bg-slate-700/60 text-slate-400 border-slate-600';
+  }
+};
+
 const pct = (part: number, total: number) =>
   total > 0 ? Math.round((part / total) * 100) : null;
 
@@ -28,6 +67,14 @@ const attackEff = (kills: number, errors: number, blocked: number, total: number
   return Math.round(((kills - errors - blocked) / total) * 100);
 };
 
+interface EnrichedPlayer extends D2PlayerStat {
+  role: RoleName;
+  pts: number;
+  net: number;
+  recPosPct: number | null;
+  attEffVal: number | null;
+}
+
 export default function D2StatsClient({
   initialMatches,
 }: {
@@ -36,7 +83,18 @@ export default function D2StatsClient({
   const matches = initialMatches;
   const [selectedMatchId, setSelectedMatchId] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'players' | 'rotations' | 'matches'>('players');
+  const [sortKey, setSortKey] = useState<SortKey>('role');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [copied, setCopied] = useState<boolean>(false);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortKey(key);
+      setSortDir(key === 'role' ? 'asc' : 'desc');
+    }
+  };
 
   const activeMatches = useMemo(() => {
     if (selectedMatchId === 'all') return matches;
@@ -135,11 +193,60 @@ export default function D2StatsClient({
       });
     });
 
-    const players = Array.from(pMap.values()).sort((a, b) => a.number - b.number);
+    const players: EnrichedPlayer[] = Array.from(pMap.values()).map((p) => {
+      const role = getPlayerRole(p.name, p.isLibero);
+      const pts = p.serve.aces + p.attack.kills + p.block.kills;
+      const totalErrors =
+        p.serve.errors +
+        p.reception.errors +
+        p.attack.errors +
+        p.attack.blocked +
+        p.block.errors;
+      const net = pts - totalErrors;
+      const recPosPct = pct(p.reception.perfect + p.reception.positive, p.reception.total);
+      const attEffVal = attackEff(p.attack.kills, p.attack.errors, p.attack.blocked, p.attack.total);
+
+      return { ...p, role, pts, net, recPosPct, attEffVal };
+    });
+
     const rotations = Array.from(rMap.values());
 
     return { players, rotations, team };
   }, [activeMatches]);
+
+  const sortedPlayers = useMemo(() => {
+    const list = [...agg.players];
+    const dir = sortDir === 'asc' ? 1 : -1;
+
+    list.sort((a, b) => {
+      if (sortKey === 'role') {
+        const rDiff = ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role);
+        if (rDiff !== 0) return rDiff * dir;
+        return a.number - b.number;
+      }
+      if (sortKey === 'pts') return (a.pts - b.pts) * dir || b.net - a.net;
+      if (sortKey === 'net') return (a.net - b.net) * dir || b.pts - a.pts;
+      if (sortKey === 'serve') {
+        const aNet = a.serve.aces - a.serve.errors;
+        const bNet = b.serve.aces - b.serve.errors;
+        return (aNet - bNet) * dir || b.serve.total - a.serve.total;
+      }
+      if (sortKey === 'recPos') {
+        const aVal = a.recPosPct ?? -999;
+        const bVal = b.recPosPct ?? -999;
+        return (aVal - bVal) * dir || b.reception.total - a.reception.total;
+      }
+      if (sortKey === 'attEff') {
+        const aVal = a.attEffVal ?? -999;
+        const bVal = b.attEffVal ?? -999;
+        return (aVal - bVal) * dir || b.attack.total - a.attack.total;
+      }
+      if (sortKey === 'block') return (a.block.kills - b.block.kills) * dir || b.block.positive - a.block.positive;
+      return 0;
+    });
+
+    return list;
+  }, [agg.players, sortKey, sortDir]);
 
   const copyForAI = async () => {
     const lines: string[] = [];
@@ -158,16 +265,19 @@ export default function D2StatsClient({
     lines.push(`- Angriff: ${t.attack.total} (Kills: ${t.attack.kills} / ${fmtPct(t.attack.kills, t.attack.total)}, Eff: ${tAttEff ?? '-'}%, Fehler: ${t.attack.errors}, Geblockt: ${t.attack.blocked})`);
     lines.push(`- Block: ${t.block.kills} Punkte, ${t.block.positive} Positiv | Defense: ${t.dig.total} (${fmtPct(t.dig.positive, t.dig.total)} Pos)\n`);
 
-    lines.push(`## Spielerinnen`);
-    agg.players.forEach((p) => {
+    lines.push(`## Spielerinnen (nach Rolle)`);
+    const byRole = [...agg.players].sort(
+      (a, b) => ROLE_ORDER.indexOf(a.role) - ROLE_ORDER.indexOf(b.role) || a.number - b.number
+    );
+    byRole.forEach((p) => {
       const recPos = p.reception.perfect + p.reception.positive;
-      const eff = attackEff(p.attack.kills, p.attack.errors, p.attack.blocked, p.attack.total);
       lines.push(
-        `- #${p.number} ${p.name}${p.isLibero ? ' (L)' : ''}: ` +
+        `- [${p.role}] #${p.number} ${p.name}: ` +
+          `Pts ${p.pts} (${p.net >= 0 ? '+' : ''}${p.net}) | ` +
           `Srv ${p.serve.total} (${p.serve.aces}#/${p.serve.errors}=) | ` +
-          `Rec ${p.reception.total} (${fmtPct(recPos, p.reception.total)} Pos) | ` +
-          `Att ${p.attack.total} (${p.attack.kills}# / ${fmtPct(p.attack.kills, p.attack.total)} / Eff ${eff ?? '-'}%) | ` +
-          `Blk ${p.block.kills}# | Dig ${p.dig.total} (${fmtPct(p.dig.positive, p.dig.total)})`
+          `Rec ${p.reception.total} (${fmtPct(recPos, p.reception.total)} Pos, ${p.reception.errors}=) | ` +
+          `Att ${p.attack.total} (${p.attack.kills}# / ${fmtPct(p.attack.kills, p.attack.total)} / Eff ${p.attEffVal ?? '-'}%) | ` +
+          `Blk ${p.block.kills}#`
       );
     });
 
@@ -187,13 +297,16 @@ export default function D2StatsClient({
   const teamRecPos = t.reception.perfect + t.reception.positive;
   const teamAttEff = attackEff(t.attack.kills, t.attack.errors, t.attack.blocked, t.attack.total);
 
+  const sortArrow = (key: SortKey) =>
+    sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '';
+
   return (
     <div className="min-h-screen bg-slate-900 text-white p-4 sm:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-wrap justify-between items-center gap-4 border-b border-slate-800 pb-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-wide">🏐 D2 Match Analytics</h1>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-wide">D2 Match Analytics</h1>
             <p className="text-xs text-slate-400 mt-1">
               VolleyStation / DataVolley Auswertung · {matches.length} gespeicherte Matches
             </p>
@@ -204,7 +317,7 @@ export default function D2StatsClient({
               onClick={copyForAI}
               className="bg-fuchsia-600 hover:bg-fuchsia-500 active:scale-95 px-4 py-2 rounded-xl text-xs sm:text-sm font-black shadow-lg transition-all"
             >
-              {copied ? '✅ Für KI kopiert!' : '📋 Für KI kopieren'}
+              {copied ? 'Kopiert!' : 'Kopie der Daten'}
             </button>
           )}
         </div>
@@ -223,9 +336,9 @@ export default function D2StatsClient({
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex flex-wrap gap-2">
                 {([
-                  ['players', '📊 Spielerinnen'],
-                  ['rotations', '🔄 Rotationen (z1–z6)'],
-                  ['matches', `🏐 Matches (${matches.length})`],
+                  ['players', 'Spielerinnen'],
+                  ['rotations', 'Rotationen (p1–p6)'],
+                  ['matches', `Matches (${matches.length})`],
                 ] as const).map(([key, label]) => (
                   <button
                     key={key}
@@ -246,7 +359,7 @@ export default function D2StatsClient({
                 onChange={(e) => setSelectedMatchId(e.target.value)}
                 className="bg-slate-800 border border-slate-700 text-white text-xs sm:text-sm font-bold rounded-xl px-3.5 py-2.5 outline-none focus:border-indigo-500"
               >
-                <option value="all">📅 Alle Matches (Saison: {matches.length})</option>
+                <option value="all">Alle Matches (Saison: {matches.length})</option>
                 {matches.map((m) => (
                   <option key={m._id} value={m._id}>
                     {m.date} · vs. {m.opponent} ({m.setsWon}:{m.setsLost})
@@ -258,7 +371,7 @@ export default function D2StatsClient({
             {/* Top Team KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-4">
-                <div className="text-[11px] font-black uppercase text-slate-400">🏐 Service Ace / Err</div>
+                <div className="text-[11px] font-black uppercase text-slate-400">Service Ace / Err</div>
                 <div className="text-xl font-black mt-1">
                   <span className="text-emerald-400">{fmtPct(t.serve.aces, t.serve.total)}</span>
                   <span className="text-slate-600 mx-1.5">/</span>
@@ -270,19 +383,19 @@ export default function D2StatsClient({
               </div>
 
               <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-4">
-                <div className="text-[11px] font-black uppercase text-slate-400">🛡️ Annahme Pos / Perf</div>
+                <div className="text-[11px] font-black uppercase text-slate-400">Annahme Pos / Perf</div>
                 <div className="text-xl font-black mt-1">
                   <span className="text-cyan-400">{fmtPct(teamRecPos, t.reception.total)}</span>
                   <span className="text-slate-600 mx-1.5">/</span>
                   <span className="text-indigo-300">{fmtPct(t.reception.perfect, t.reception.total)}</span>
                 </div>
                 <div className="text-[11px] text-slate-400 mt-0.5">
-                  {t.reception.errors} Fehler ({t.reception.total} Annahmen)
+                  <span className="text-red-400 font-bold">{t.reception.errors} Fehler</span> ({t.reception.total} Annahmen)
                 </div>
               </div>
 
               <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-4">
-                <div className="text-[11px] font-black uppercase text-slate-400">⚡ Angriff Kill / Eff</div>
+                <div className="text-[11px] font-black uppercase text-slate-400">Angriff Kill / Eff</div>
                 <div className="text-xl font-black mt-1">
                   <span className="text-emerald-400">{fmtPct(t.attack.kills, t.attack.total)}</span>
                   <span className="text-slate-600 mx-1.5">/</span>
@@ -296,7 +409,7 @@ export default function D2StatsClient({
               </div>
 
               <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-4">
-                <div className="text-[11px] font-black uppercase text-slate-400">🧱 Block Punkte</div>
+                <div className="text-[11px] font-black uppercase text-slate-400">Block Punkte</div>
                 <div className="text-2xl font-black text-violet-400 mt-1">{t.block.kills}</div>
                 <div className="text-[11px] text-slate-400 mt-0.5">
                   +{t.block.positive} Positiv · {t.block.errors} Fehler
@@ -304,7 +417,7 @@ export default function D2StatsClient({
               </div>
 
               <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-4 col-span-2 lg:col-span-1">
-                <div className="text-[11px] font-black uppercase text-slate-400">🤸 Defense (Dig %)</div>
+                <div className="text-[11px] font-black uppercase text-slate-400">Defense (Dig %)</div>
                 <div className="text-2xl font-black text-amber-400 mt-1">
                   {fmtPct(t.dig.positive, t.dig.total)}
                 </div>
@@ -319,35 +432,100 @@ export default function D2StatsClient({
               <div className="bg-slate-800/60 border border-slate-700 rounded-3xl overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs sm:text-sm">
-                    <thead className="bg-slate-900/80 text-[11px] uppercase text-slate-400 border-b border-slate-700">
+                    <thead className="bg-slate-900/80 text-[11px] uppercase text-slate-400 border-b border-slate-700 select-none">
                       <tr>
-                        <th className="p-3.5">Spielerin</th>
-                        <th className="p-3.5 text-right">Service (Ace / Err)</th>
-                        <th className="p-3.5 text-right">Annahme (Pos / Perf)</th>
-                        <th className="p-3.5 text-right">Angriff (Kill% / Eff)</th>
-                        <th className="p-3.5 text-right">Block</th>
-                        <th className="p-3.5 text-right">Defense</th>
+                        <th
+                          onClick={() => handleSort('role')}
+                          className="p-3.5 cursor-pointer hover:text-white transition-colors"
+                        >
+                          Spielerin / Rolle{sortArrow('role')}
+                        </th>
+                        <th
+                          onClick={() => handleSort('pts')}
+                          className="p-3.5 text-right cursor-pointer hover:text-white transition-colors"
+                        >
+                          Pts{sortArrow('pts')}
+                        </th>
+                        <th
+                          onClick={() => handleSort('net')}
+                          className="p-3.5 text-right cursor-pointer hover:text-white transition-colors"
+                        >
+                          +/-{sortArrow('net')}
+                        </th>
+                        <th
+                          onClick={() => handleSort('serve')}
+                          className="p-3.5 text-right cursor-pointer hover:text-white transition-colors"
+                        >
+                          Service (Ace / Err){sortArrow('serve')}
+                        </th>
+                        <th
+                          onClick={() => handleSort('recPos')}
+                          className="p-3.5 text-right cursor-pointer hover:text-white transition-colors"
+                        >
+                          Annahme (Pos / Perf / Err){sortArrow('recPos')}
+                        </th>
+                        <th
+                          onClick={() => handleSort('attEff')}
+                          className="p-3.5 text-right cursor-pointer hover:text-white transition-colors"
+                        >
+                          Angriff (Kill% / Eff){sortArrow('attEff')}
+                        </th>
+                        <th
+                          onClick={() => handleSort('block')}
+                          className="p-3.5 text-right cursor-pointer hover:text-white transition-colors"
+                        >
+                          Block{sortArrow('block')}
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700/60">
-                      {agg.players.map((p) => {
-                        const recPos = p.reception.perfect + p.reception.positive;
-                        const eff = attackEff(
-                          p.attack.kills,
-                          p.attack.errors,
-                          p.attack.blocked,
-                          p.attack.total
-                        );
+                      {sortedPlayers.map((p) => {
+                        const recColor =
+                          p.recPosPct === null
+                            ? 'text-slate-600'
+                            : p.recPosPct >= 45
+                            ? 'text-emerald-400'
+                            : p.recPosPct <= 30
+                            ? 'text-red-400'
+                            : 'text-cyan-400';
+
+                        const effColor =
+                          p.attEffVal === null
+                            ? 'text-slate-400'
+                            : p.attEffVal >= 25
+                            ? 'text-emerald-400'
+                            : p.attEffVal <= 5
+                            ? 'text-red-400'
+                            : 'text-amber-300';
+
                         return (
                           <tr key={p.name} className="hover:bg-slate-800/80">
                             <td className="p-3.5 font-black whitespace-nowrap">
-                              <span className="text-slate-400 mr-1.5">#{p.number}</span>
+                              <span className="text-slate-500 mr-1.5">#{p.number}</span>
                               {p.name}
-                              {p.isLibero && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-300 text-[10px]">
-                                  L
-                                </span>
-                              )}
+                              <span
+                                className={`ml-2 px-1.5 py-0.5 rounded border text-[10px] font-bold ${getRoleBadgeStyle(
+                                  p.role
+                                )}`}
+                              >
+                                {p.role}
+                              </span>
+                            </td>
+
+                            <td className="p-3.5 text-right font-black text-white whitespace-nowrap">
+                              {p.pts > 0 ? p.pts : <span className="text-slate-600">0</span>}
+                            </td>
+
+                            <td
+                              className={`p-3.5 text-right font-black whitespace-nowrap ${
+                                p.net > 0
+                                  ? 'text-emerald-400'
+                                  : p.net < 0
+                                  ? 'text-red-400'
+                                  : 'text-slate-400'
+                              }`}
+                            >
+                              {p.net > 0 ? `+${p.net}` : p.net}
                             </td>
 
                             <td className="p-3.5 text-right whitespace-nowrap">
@@ -367,11 +545,15 @@ export default function D2StatsClient({
                             <td className="p-3.5 text-right whitespace-nowrap">
                               {p.reception.total > 0 ? (
                                 <>
-                                  <span className="font-black text-cyan-400">
-                                    {fmtPct(recPos, p.reception.total)}
+                                  <span className={`font-black ${recColor}`}>
+                                    {p.recPosPct}%
                                   </span>
                                   <span className="text-slate-400 ml-1.5">
-                                    ({fmtPct(p.reception.perfect, p.reception.total)} · {p.reception.total})
+                                    ({fmtPct(p.reception.perfect, p.reception.total)} ·{' '}
+                                    <span className={p.reception.errors > 0 ? 'text-red-400 font-bold' : ''}>
+                                      {p.reception.errors}=
+                                    </span>{' '}
+                                    · {p.reception.total})
                                   </span>
                                 </>
                               ) : (
@@ -382,11 +564,12 @@ export default function D2StatsClient({
                             <td className="p-3.5 text-right whitespace-nowrap">
                               {p.attack.total > 0 ? (
                                 <>
-                                  <span className="font-black text-emerald-400">
+                                  <span className="font-black text-white">
                                     {fmtPct(p.attack.kills, p.attack.total)}
                                   </span>
                                   <span className="text-slate-400 ml-1.5">
-                                    (Eff {eff ?? '–'}% · {p.attack.kills}/{p.attack.total})
+                                    (<span className={`font-bold ${effColor}`}>Eff {p.attEffVal}%</span> ·{' '}
+                                    {p.attack.kills}/{p.attack.total})
                                   </span>
                                 </>
                               ) : (
@@ -400,21 +583,6 @@ export default function D2StatsClient({
                                   <span className="font-black text-violet-400">{p.block.kills}#</span>
                                   <span className="text-slate-400 ml-1">
                                     (+{p.block.positive} / {p.block.errors}=)
-                                  </span>
-                                </>
-                              ) : (
-                                <span className="text-slate-600">–</span>
-                              )}
-                            </td>
-
-                            <td className="p-3.5 text-right whitespace-nowrap">
-                              {p.dig.total > 0 ? (
-                                <>
-                                  <span className="font-black text-amber-400">
-                                    {fmtPct(p.dig.positive, p.dig.total)}
-                                  </span>
-                                  <span className="text-slate-400 ml-1">
-                                    ({p.dig.positive}/{p.dig.total})
                                   </span>
                                 </>
                               ) : (
@@ -442,7 +610,7 @@ export default function D2StatsClient({
                       className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5 space-y-3"
                     >
                       <div className="flex justify-between items-center border-b border-slate-700 pb-2">
-                        <span className="text-lg font-black text-white">Rotation z{r.zone}</span>
+                        <span className="text-lg font-black text-white">Rotation p{r.zone}</span>
                         <span className="text-xs text-slate-400 font-bold">
                           {r.soTotal + r.bpTotal} Rallies
                         </span>

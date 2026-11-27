@@ -59,3 +59,17 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ error: e.message || 'Fehler beim Löschen.' }, { status: 500 });
   }
 }
+
+export async function PATCH(req: Request) {
+  try {
+    await dbConnect();
+    const { id, opponent } = await req.json();
+    if (!id || !opponent?.trim()) {
+      return NextResponse.json({ error: 'ID oder Gegnername fehlt.' }, { status: 400 });
+    }
+    await D2Match.findByIdAndUpdate(id, { opponent: opponent.trim() });
+    return NextResponse.json({ success: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message || 'Fehler beim Umbenennen.' }, { status: 500 });
+  }
+}
